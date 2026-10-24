@@ -1,0 +1,73 @@
+name: ci
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "23 9 * * *"
+
+permissions:
+  contents: read
+
+defaults:
+  run:
+    shell: bash
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: shellcheck -e SC1091 install.sh bin/bable libexec/fm-main-stall-nudge tests/e2e.sh
+
+  e2e:
+    needs: lint
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-15, macos-26, macos-15-intel, macos-26-intel]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: End-to-end test in a throwaway HOME
+        run: tests/e2e.sh
+
+      - name: Real install
+        run: env -u GH_TOKEN -u GITHUB_TOKEN ./install.sh | tee out1
+
+      - name: Launch agents are running
+        run: |
+          for _ in $(seq 10); do
+            if launchctl print "gui/$(id -u)/dev.bable.herdr" | grep -q 'state = running'; then break; fi
+            sleep 1
+          done
+          launchctl print "gui/$(id -u)/dev.bable.herdr" | grep -q 'state = running'
+          launchctl print "gui/$(id -u)/dev.bable.stall-nudge" >/dev/null
+
+      - name: Second install changes nothing
+        run: |
+          ./install.sh | tee out2
+          grep -q 'bable: 0 changed' out2
+
+      - name: Status
+        run: |
+          env -u GH_TOKEN -u GITHUB_TOKEN ~/.local/bin/bable status | tee st
+          grep -q 'gh auth login --web' st
+
+      - name: Uninstall
+        run: |
+          ~/.local/bin/bable uninstall
+          if ls ~/Library/LaunchAgents/dev.bable.* 2>/dev/null; then exit 1; fi
+          if launchctl print "gui/$(id -u)/dev.bable.herdr" >/dev/null 2>&1; then exit 1; fi
+
+      - if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: bable-${{ matrix.os }}
+          path: |
+            ~/Library/Logs/bable
+            ~/.local/state/bable
+          if-no-files-found: ignore
