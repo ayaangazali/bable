@@ -22,7 +22,7 @@ kept() { echo "  = $* (left untouched)"; }
 have() { command -v "$1" >/dev/null; }
 services() { [ "${BABLE_NO_SERVICES:-0}" != 1 ]; }
 loaded() { launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1; }
-herdr_running() { env -u HERDR_SOCKET_PATH herdr status server 2>/dev/null | grep -qx 'status: running'; }
+herdr_running() { env -u HERDR_SOCKET_PATH herdr status server 2>/dev/null | grep -x 'status: running' >/dev/null; }
 row() { printf '  %-5s %-13s %s\n' "$1" "$2" "$3"; if [ "$1" = miss ]; then FAIL=1; fi; }
 note() { printf '  note  %s\n' "$*"; }
 m_add() { mkdir -p "$STATE"; echo "$*" >> "$MANIFEST"; }
@@ -44,7 +44,7 @@ install_script() {
   case $1 in
     uv) curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh ;;
     herdr) curl -fsSL https://herdr.dev/install.sh | sh ;;
-    bun) curl -fsSL https://bun.sh/install | bash ;;
+    bun) curl -fsSL https://bun.sh/install | SHELL=/bin/sh bash ;;
   esac
 }
 
@@ -232,7 +232,7 @@ status() {
     note "Remote Login off: System Settings > General > Sharing > Remote Login"
   fi
   if pmset -g batt 2>/dev/null | grep -q InternalBattery; then
-    if loaded dev.bable.awake; then row ok awake on; else note "keep agents running: bable awake on (lid closed without a display still sleeps)"; fi
+    note "a sleeping MacBook pauses agents: keep caffeinate -ims running (lid closed without a display still sleeps)"
   else
     pm=$(pmset -g 2>/dev/null || true)
     [ "$(awk '$1 == "sleep" { print $2; exit }' <<<"$pm")" = 0 ] || note "run: sudo pmset -a sleep 0"
@@ -324,32 +324,13 @@ uninstall() {
   if [ -d "$HOME/.local/share/bable" ]; then rm -rf "$HOME/.local/share/bable"; fi
 }
 
-awake() {
-  case "${1:-}" in
-    on)
-      mkdir -p "$LA"
-      put_plist dev.bable.awake <<EOF
-  <key>ProgramArguments</key><array><string>/usr/bin/caffeinate</string><string>-ims</string></array>
-  <key>RunAtLoad</key><true/>
-  <key>KeepAlive</key><true/>
-EOF
-      echo "bable: awake on. A closed lid without an external display still sleeps." ;;
-    off)
-      if services && loaded dev.bable.awake; then launchctl bootout "gui/$(id -u)/dev.bable.awake" || true; fi
-      rm -f "$LA/dev.bable.awake.plist"
-      echo "bable: awake off" ;;
-    *) usage >&2; exit 2 ;;
-  esac
-}
-
-usage() { echo "usage: bable setup | status | update | uninstall | awake on|off"; }
+usage() { echo "usage: bable setup | status | update | uninstall"; }
 
 case "${1:-}" in
   setup) setup ;;
   status) status ;;
   update) update ;;
   uninstall) uninstall ;;
-  awake) awake "${2:-}" ;;
   -h|--help|help) usage ;;
   *) usage >&2; exit 2 ;;
 esac

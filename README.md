@@ -64,14 +64,7 @@ A Mac mini usually runs headless. Launch agents need a logged-in user session: l
 
 ## MacBook
 
-A sleeping laptop pauses every agent. Keep it awake while agents run:
-
-```bash
-bable awake on
-bable awake off
-```
-
-`awake on` runs `caffeinate -ims` as the launch agent `dev.bable.awake`. Closing the lid without an external display still sleeps the Mac.
+A sleeping laptop pauses every agent. Keep `caffeinate -ims` running in a terminal while agents work. Closing the lid without an external display still sleeps the Mac.
 
 ## Commands
 
@@ -81,7 +74,6 @@ bable awake off
 | `bable status` | Read-only checklist. Exits 1 while anything is `miss`. |
 | `bable update` | The only command that upgrades: what bable installed, Firstmate (when it has no local changes) and bable itself (for one-line installs). It prints the `launchctl` command when Herdr needs a restart or reload and never restarts it for you, because a restart ends Herdr's sessions. |
 | `bable uninstall` | Removes the launch agents, release binaries, unedited configs (and their folders when empty), its logs and the `.zprofile` lines bable added. It prints the commands for the rest (Homebrew formulas, bun packages, `~/firstmate`) and does not run them. |
-| `bable awake on\|off` | Keeps a MacBook awake while agents run. |
 
 Logs are in `~/Library/Logs/bable`.
 

@@ -17,7 +17,8 @@ in_home() {
   local home=$1 path=$2
   shift 2
   env -i HOME="$home" PATH="$path" USER="$USER" LOGNAME="${LOGNAME:-$USER}" TMPDIR="${TMPDIR:-/tmp}" \
-    BABLE_NO_SERVICES=1 BABLE_REPO="file://$ROOT" "$@"
+    BABLE_NO_SERVICES=1 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.file://$ROOT.insteadOf" \
+    GIT_CONFIG_VALUE_0=https://github.com/ayaangazali/bable.git "$@"
 }
 
 run_bable() { in_home "$T" "$PATH" "$@"; }

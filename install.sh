@@ -30,7 +30,7 @@ main() {
     src=$(cd "$(dirname "$src")" && pwd)
   else
     src=$HOME/.local/share/bable/src
-    [ -d "$src" ] || git clone --depth 1 "${BABLE_REPO:-https://github.com/ayaangazali/bable.git}" "$src"
+    [ -d "$src" ] || git clone --depth 1 https://github.com/ayaangazali/bable.git "$src"
   fi
 
   mkdir -p "$HOME/.local/bin"
