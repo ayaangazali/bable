@@ -8,7 +8,7 @@ Derived from [i098/Crewship](https://github.com/i098/Crewship) under FSL-1.1-ALv
 
 ## Install
 
-You need macOS 14 or newer (Apple silicon or Intel), a normal (non-root) account, and the Xcode Command Line Tools (`xcode-select --install`). If Homebrew is missing, the installer sets it up, which needs an admin account.
+You need macOS 14 or newer (Apple silicon or Intel), a normal (non-root) account, and the Xcode Command Line Tools (`xcode-select --install`). If git, gh, node or jq is missing and Homebrew is not installed, the installer sets up Homebrew first; Homebrew asks for your password and needs an admin account.
 
 From a checkout:
 
@@ -34,6 +34,8 @@ The installer ends with `bable status`. Run it again any time:
   todo  omp sign-in   run: omp, then /login
 ```
 
+When the installer adds `~/.local/bin` and `~/.bun/bin` to `PATH` in `~/.zprofile`, open a new terminal (or run `source ~/.zprofile`) before running `bable`, `omp` or `herdr`.
+
 `ok` is ready, `todo` is a step only you can do, `miss` means `bable setup` has something left to install, and `note` is advice. Run the command after `run:`. Running `./install.sh` or `bable setup` again is safe: a second run changes nothing.
 
 ## Sign in
@@ -54,7 +56,7 @@ cd ~/firstmate && exec omp
 
 ## Mac mini
 
-A Mac mini usually runs headless. Set these once; `bable status` prints a `note` for Remote Login, sleep, autorestart and FileVault. bable never changes them for you:
+A Mac mini usually runs headless. Launch agents need a logged-in user session: log in at the console once (or turn on automatic login) before installing over SSH, otherwise setup writes the launch agents without loading them and asks you to run `bable setup` again after that login. Set these once; `bable status` prints a `note` for Remote Login, sleep, autorestart and FileVault. bable never changes them for you:
 
 - Remote Login: System Settings > General > Sharing > Remote Login.
 - Automatic login for this user (System Settings > Users & Groups), so launch agents start after a reboot. With FileVault on, a power cut stops at the unlock screen until someone logs in.
@@ -77,8 +79,8 @@ bable awake off
 | --- | --- |
 | `bable setup` | Installs what is missing and prints `bable status`. |
 | `bable status` | Read-only checklist. Exits 1 while anything is `miss`. |
-| `bable update` | The only command that upgrades: what bable installed, Firstmate (when it has no local changes) and bable itself (for one-line installs). It prints the `launchctl kickstart` command when Herdr needs a restart and never restarts it for you, because a restart ends Herdr's sessions. |
-| `bable uninstall` | Removes the launch agents, release binaries, unedited configs and `.zprofile` lines bable added. It prints the commands for the rest (Homebrew formulas, bun packages, `~/firstmate`) and does not run them. |
+| `bable update` | The only command that upgrades: what bable installed, Firstmate (when it has no local changes) and bable itself (for one-line installs). It prints the `launchctl` command when Herdr needs a restart or reload and never restarts it for you, because a restart ends Herdr's sessions. |
+| `bable uninstall` | Removes the launch agents, release binaries, unedited configs (and their folders when empty), its logs and the `.zprofile` lines bable added. It prints the commands for the rest (Homebrew formulas, bun packages, `~/firstmate`) and does not run them. |
 | `bable awake on\|off` | Keeps a MacBook awake while agents run. |
 
 Logs are in `~/Library/Logs/bable`.
@@ -94,7 +96,7 @@ Only what is missing from your `PATH`:
 - Firstmate cloned to `~/firstmate` on `main`, with Herdr as its backend.
 - Configs, only where no file exists yet: `~/.omp/agent/config.yml`, `~/.omp/agent/lsp.json`, `~/.acpx/config.json`, `~/.no-mistakes/config.yaml`, `~/.config/herdr/config.toml`.
 - Launch agents `dev.bable.herdr` and `dev.bable.stall-nudge`.
-- One `PATH` line in `~/.zprofile` (plus Homebrew's `shellenv` line when bable installed Homebrew on Apple silicon).
+- One `PATH` line in `~/.zprofile` (plus Homebrew's `shellenv` line when bable installed formulas from `/opt/homebrew` and it was not on your `PATH`).
 
 bable records each item in `~/.local/state/bable/manifest`, so update and uninstall act only on what bable added.
 
@@ -120,4 +122,4 @@ The seeded configs come from Crewship, without their comments:
 tests/e2e.sh
 ```
 
-It runs the real installer in throwaway home folders with `BABLE_NO_SERVICES=1`, which writes and lints the launch agents but never loads them. CI runs it on Apple silicon and Intel macOS, then installs for real, checks the launch agents run, installs again, and uninstalls. CI also runs nightly against the latest upstream releases.
+It runs the real installer in throwaway home folders with `BABLE_NO_SERVICES=1`, which writes and lints the launch agents but never loads them. CI runs it on macOS, then installs for real, checks the launch agents run, installs again, and uninstalls. Pushes to `main` and pull requests use one Apple silicon runner, because macOS minutes cost ten times as much on a private repository. The nightly run and manual runs (`workflow_dispatch`) cover macOS 15 and 26 on Apple silicon and Intel against the latest upstream releases.

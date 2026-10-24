@@ -11,6 +11,7 @@ TOOLS="git gh node uv jq herdr bun omp acpx no-mistakes treehouse"
 SVC_PATH=$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
 PATH_LINE="export PATH=\"\$HOME/.local/bin:\$HOME/.bun/bin:\$PATH\""
 BREW_LINE="eval \"\$(/opt/homebrew/bin/brew shellenv)\""
+USER_PATH=$PATH
 export PATH=$PATH:$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin
 N=0
 FAIL=0
@@ -27,6 +28,7 @@ note() { printf '  note  %s\n' "$*"; }
 m_add() { mkdir -p "$STATE"; echo "$*" >> "$MANIFEST"; }
 m_list() { [ -f "$MANIFEST" ] && awk -v m="$1" '$2 == m { print $1 }' "$MANIFEST"; }
 m_has() { [ -f "$MANIFEST" ] && awk -v n="$1" -v m="$2" '$1 == n && $2 == m { f = 1 } END { exit !f }' "$MANIFEST"; }
+on_user_path() { case ":$USER_PATH:" in *":$1:"*) ;; *) return 1 ;; esac; }
 pkg_of() { if [ "$1" = omp ]; then echo @oh-my-pi/pi-coding-agent; else echo "$1"; fi; }
 
 seeds() {
@@ -48,8 +50,8 @@ install_script() {
 
 latest_tag() {
   local url
-  url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/kunchenguid/$1/releases/latest")
-  echo "${url##*/tag/}"
+  url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/kunchenguid/$1/releases/latest") || return 1
+  case $url in */tag/*) echo "${url##*/tag/}" ;; *) return 1 ;; esac
 }
 
 install_release() {
@@ -71,6 +73,10 @@ install_release() {
   mkdir -p "$HOME/.local/bin"
   install -m 0755 "$tmp/$t" "$HOME/.local/bin/$t"
   rm -rf "$tmp"
+  if [ -f "$MANIFEST" ]; then
+    grep -v "^$t release " "$MANIFEST" > "$MANIFEST.tmp" || true
+    mv "$MANIFEST.tmp" "$MANIFEST"
+  fi
   m_add "$t release $tag"
   changed "$t $tag"
 }
@@ -96,11 +102,13 @@ put_plist() {
     fresh=1
   fi
   if ! services; then return 0; fi
-  if ! loaded "$label"; then
+  if ! launchctl print "gui/$(id -u)" >/dev/null 2>&1; then
+    echo "  ! $label not loaded: log in at the console once (or turn on automatic login), then run: bable setup"
+  elif ! loaded "$label"; then
     launchctl bootstrap "gui/$(id -u)" "$dst"
     changed "loaded $label"
   elif [ "$fresh" = 1 ]; then
-    echo "  ! restart to apply: launchctl kickstart -k gui/$(id -u)/$label"
+    echo "  ! reload to apply: launchctl bootout gui/$(id -u)/$label && launchctl bootstrap gui/$(id -u) $dst"
   fi
 }
 
@@ -152,7 +160,7 @@ setup() {
     fi
   done < <(seeds)
 
-  if m_has brew brew && [ "$(uname -m)" = arm64 ]; then add_line zprofile-brew "$BREW_LINE"; fi
+  if [ -n "$(m_list brew)" ] && [ -x /opt/homebrew/bin/brew ] && ! on_user_path /opt/homebrew/bin; then add_line zprofile-brew "$BREW_LINE"; fi
   add_line zprofile-path "$PATH_LINE"
 
   mkdir -p "$LA" "$LOGS"
@@ -231,6 +239,7 @@ status() {
     [ "$(awk '$1 == "autorestart" { print $2; exit }' <<<"$pm")" = 1 ] || note "run: sudo pmset -a autorestart 1"
     [ "$(fdesetup isactive 2>/dev/null || true)" != true ] || note "FileVault on: after a power cut agents wait for a GUI login"
   fi
+  if ! on_user_path "$HOME/.local/bin" || ! on_user_path "$HOME/.bun/bin"; then note "open a new terminal (or: source ~/.zprofile) to put bable, omp and herdr on PATH"; fi
   return "$FAIL"
 }
 
@@ -244,11 +253,7 @@ update() {
   for t in $(m_list bun); do bun add -g "$(pkg_of "$t")@latest"; done
   for t in $(m_list release); do
     tag=$(latest_tag "$t")
-    if ! grep -qx "$t release $tag" "$MANIFEST"; then
-      grep -v "^$t release " "$MANIFEST" > "$MANIFEST.tmp" || true
-      mv "$MANIFEST.tmp" "$MANIFEST"
-      install_release "$t"
-    fi
+    grep -qx "$t release $tag" "$MANIFEST" || install_release "$t"
   done
   if m_has firstmate clone; then
     if [ -z "$(git -C "$FM" status --porcelain)" ]; then git -C "$FM" pull --ff-only; else kept "firstmate has local changes"; fi
@@ -257,7 +262,7 @@ update() {
   if [ "$old" != "$new" ] && loaded dev.bable.herdr; then
     echo "  ! herdr upgraded; restart to apply: launchctl kickstart -k gui/$(id -u)/dev.bable.herdr"
   fi
-  exec "$SRC/bin/bable" setup
+  PATH=$USER_PATH exec "$SRC/bin/bable" setup
 }
 
 uninstall() {
@@ -279,6 +284,7 @@ uninstall() {
         cfg)
           if cmp -s "$SRC/config/$extra" "$HOME/$name"; then
             rm -f "$HOME/$name"; echo "  - $HOME/$name"
+            (cd "$HOME" && rmdir -p "$(dirname "$name")" 2>/dev/null) || true
           elif [ -e "$HOME/$name" ]; then
             kept "$HOME/$name edited"
           fi ;;
@@ -288,6 +294,7 @@ uninstall() {
           if [ -f "$HOME/.zprofile" ]; then
             grep -vxF "$line" "$HOME/.zprofile" > "$STATE/zprofile" || true
             cat "$STATE/zprofile" > "$HOME/.zprofile"
+            [ -s "$HOME/.zprofile" ] || rm -f "$HOME/.zprofile"
             echo "  - $HOME/.zprofile: $line"
           fi ;;
         brew)
@@ -312,7 +319,7 @@ uninstall() {
   fi
   if [ -n "$MANUAL" ]; then echo "bable: kept these; remove them yourself if you want:$MANUAL"; fi
   rm -f "$HOME/.local/bin/bable"
-  rm -rf "$STATE"
+  rm -rf "$STATE" "$LOGS"
   echo "bable: uninstalled"
   if [ -d "$HOME/.local/share/bable" ]; then rm -rf "$HOME/.local/share/bable"; fi
 }
@@ -331,14 +338,11 @@ EOF
       if services && loaded dev.bable.awake; then launchctl bootout "gui/$(id -u)/dev.bable.awake" || true; fi
       rm -f "$LA/dev.bable.awake.plist"
       echo "bable: awake off" ;;
-    *) usage ;;
+    *) usage >&2; exit 2 ;;
   esac
 }
 
-usage() {
-  echo "usage: bable setup | status | update | uninstall | awake on|off" >&2
-  exit 2
-}
+usage() { echo "usage: bable setup | status | update | uninstall | awake on|off"; }
 
 case "${1:-}" in
   setup) setup ;;
@@ -346,5 +350,6 @@ case "${1:-}" in
   update) update ;;
   uninstall) uninstall ;;
   awake) awake "${2:-}" ;;
-  *) usage ;;
+  -h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
 esac

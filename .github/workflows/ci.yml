@@ -2,6 +2,7 @@ name: ci
 
 on:
   push:
+    branches: [main]
   pull_request:
   workflow_dispatch:
   schedule:
@@ -26,7 +27,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-15, macos-26, macos-15-intel, macos-26-intel]
+        os: ${{ fromJSON(contains('schedule workflow_dispatch', github.event_name) && '["macos-15", "macos-26", "macos-15-intel", "macos-26-intel"]' || '["macos-26"]') }}
     runs-on: ${{ matrix.os }}
     timeout-minutes: 30
     steps:

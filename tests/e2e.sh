@@ -67,7 +67,9 @@ run_bable "$T/.local/bin/bable" uninstall > "$STUB/out4" 2>&1 || { cat "$STUB/ou
 [ ! -e "$T/.omp/agent/config.yml" ] || fail "unmodified seed left behind"
 cmp -s "$STUB/sentinel" "$T/.no-mistakes/config.yaml" || fail "user config removed"
 [ -d "$T/firstmate/.git" ] || fail "firstmate removed"
-! grep -q '.local/bin' "$T/.zprofile" || fail ".zprofile line left behind"
+[ ! -e "$T/.zprofile" ] || fail "empty .zprofile left behind"
+[ ! -e "$T/.omp" ] || fail "empty seed folder left behind"
+[ ! -e "$T/Library/Logs/bable" ] || fail "log folder left behind"
 run_bable "$ROOT/bin/bable" uninstall > "$STUB/out5" 2>&1 || { cat "$STUB/out5"; fail "second uninstall exited non-zero"; }
 
 CASE="piped install, herdr already on PATH"
