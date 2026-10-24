@@ -274,6 +274,7 @@ uninstall() {
     if services && loaded "$label"; then
       if [ "$label" = dev.bable.herdr ]; then echo "bable: stopping dev.bable.herdr ends its herdr sessions"; fi
       launchctl bootout "gui/$(id -u)/$label" || true
+      for _ in $(seq 30); do loaded "$label" || break; sleep 1; done
     fi
     rm -f "$f"
     echo "  - $f"
