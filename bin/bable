@@ -1,0 +1,350 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SRC=$(cd "$(dirname "$(readlink "$0" || echo "$0")")/.." && pwd)
+STATE=$HOME/.local/state/bable
+MANIFEST=$STATE/manifest
+LOGS=$HOME/Library/Logs/bable
+LA=$HOME/Library/LaunchAgents
+FM=$HOME/firstmate
+TOOLS="git gh node uv jq herdr bun omp acpx no-mistakes treehouse"
+SVC_PATH=$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+PATH_LINE="export PATH=\"\$HOME/.local/bin:\$HOME/.bun/bin:\$PATH\""
+BREW_LINE="eval \"\$(/opt/homebrew/bin/brew shellenv)\""
+export PATH=$PATH:$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin
+N=0
+FAIL=0
+MANUAL=""
+
+changed() { N=$((N + 1)); echo "  + $*"; }
+kept() { echo "  = $* (left untouched)"; }
+have() { command -v "$1" >/dev/null; }
+services() { [ "${BABLE_NO_SERVICES:-0}" != 1 ]; }
+loaded() { launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1; }
+herdr_running() { env -u HERDR_SOCKET_PATH herdr status server 2>/dev/null | grep -qx 'status: running'; }
+row() { printf '  %-5s %-13s %s\n' "$1" "$2" "$3"; if [ "$1" = miss ]; then FAIL=1; fi; }
+note() { printf '  note  %s\n' "$*"; }
+m_add() { mkdir -p "$STATE"; echo "$*" >> "$MANIFEST"; }
+m_list() { [ -f "$MANIFEST" ] && awk -v m="$1" '$2 == m { print $1 }' "$MANIFEST"; }
+m_has() { [ -f "$MANIFEST" ] && awk -v n="$1" -v m="$2" '$1 == n && $2 == m { f = 1 } END { exit !f }' "$MANIFEST"; }
+pkg_of() { if [ "$1" = omp ]; then echo @oh-my-pi/pi-coding-agent; else echo "$1"; fi; }
+
+seeds() {
+  printf '%s\n' \
+    "omp.yml .omp/agent/config.yml" \
+    "omp-lsp.json .omp/agent/lsp.json" \
+    "acpx.json .acpx/config.json" \
+    "no-mistakes.yaml .no-mistakes/config.yaml" \
+    "herdr.toml .config/herdr/config.toml"
+}
+
+install_script() {
+  case $1 in
+    uv) curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh ;;
+    herdr) curl -fsSL https://herdr.dev/install.sh | sh ;;
+    bun) curl -fsSL https://bun.sh/install | bash ;;
+  esac
+}
+
+latest_tag() {
+  local url
+  url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/kunchenguid/$1/releases/latest")
+  echo "${url##*/tag/}"
+}
+
+install_release() {
+  local t=$1 tag arch asset tmp base
+  tag=$(latest_tag "$t")
+  arch=amd64
+  if [ "$(uname -m)" = arm64 ]; then arch=arm64; fi
+  asset=$t-$tag-darwin-$arch.tar.gz
+  base=https://github.com/kunchenguid/$t/releases/download/$tag
+  tmp=$(mktemp -d)
+  curl -fsSL -o "$tmp/$asset" "$base/$asset"
+  curl -fsSL -o "$tmp/checksums.txt" "$base/checksums.txt"
+  if ! (cd "$tmp" && grep " $asset\$" checksums.txt | shasum -a 256 -c -) >/dev/null 2>&1; then
+    rm -rf "$tmp"
+    echo "bable: checksum mismatch for $asset" >&2
+    exit 1
+  fi
+  tar -xzf "$tmp/$asset" -C "$tmp"
+  mkdir -p "$HOME/.local/bin"
+  install -m 0755 "$tmp/$t" "$HOME/.local/bin/$t"
+  rm -rf "$tmp"
+  m_add "$t release $tag"
+  changed "$t $tag"
+}
+
+put_plist() {
+  local label=$1 dst=$LA/$1.plist tmp fresh=0
+  tmp=$(mktemp)
+  {
+    printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
+      '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+      '<plist version="1.0">' '<dict>'
+    printf '  <key>Label</key><string>%s</string>\n' "$label"
+    cat
+    printf '%s\n' '</dict>' '</plist>'
+  } > "$tmp"
+  if cmp -s "$tmp" "$dst"; then
+    rm -f "$tmp"
+  else
+    plutil -lint -s "$tmp"
+    mv "$tmp" "$dst"
+    chmod 644 "$dst"
+    changed "$dst"
+    fresh=1
+  fi
+  if ! services; then return 0; fi
+  if ! loaded "$label"; then
+    launchctl bootstrap "gui/$(id -u)" "$dst"
+    changed "loaded $label"
+  elif [ "$fresh" = 1 ]; then
+    echo "  ! restart to apply: launchctl kickstart -k gui/$(id -u)/$label"
+  fi
+}
+
+add_line() {
+  if ! grep -qxF "$2" "$HOME/.zprofile" 2>/dev/null; then
+    echo "$2" >> "$HOME/.zprofile"
+    m_add "$1 zprofile"
+    changed "$HOME/.zprofile: $2"
+  fi
+}
+
+setup() {
+  echo "bable: setting up from $SRC"
+  local t missing="" src dst
+  for t in git gh node jq; do have "$t" || missing="$missing $t"; done
+  if [ -n "$missing" ]; then
+    have brew || { echo "bable: Homebrew is missing; run ./install.sh first" >&2; exit 1; }
+    xargs brew install <<<"$missing"
+    for t in $missing; do m_add "$t brew"; changed "$t (Homebrew)"; done
+  fi
+  for t in uv herdr bun; do
+    if ! have "$t"; then install_script "$t"; m_add "$t script"; changed "$t"; fi
+  done
+  for t in omp acpx; do
+    if ! have "$t"; then bun add -g "$(pkg_of "$t")"; m_add "$t bun"; changed "$t"; fi
+  done
+  for t in no-mistakes treehouse; do
+    have "$t" || install_release "$t"
+  done
+
+  if [ -e "$FM" ]; then
+    kept "$FM"
+  else
+    git clone --quiet --branch main https://github.com/kunchenguid/firstmate.git "$FM"
+    mkdir -p "$FM/config"
+    echo herdr > "$FM/config/backend"
+    m_add "firstmate clone"
+    changed "Firstmate cloned to $FM (backend herdr)"
+  fi
+
+  while read -r src dst; do
+    if [ -e "$HOME/$dst" ]; then
+      kept "$HOME/$dst"
+    else
+      mkdir -p "$(dirname "$HOME/$dst")"
+      cp "$SRC/config/$src" "$HOME/$dst"
+      m_add "$dst cfg $src"
+      changed "$HOME/$dst"
+    fi
+  done < <(seeds)
+
+  if m_has brew brew && [ "$(uname -m)" = arm64 ]; then add_line zprofile-brew "$BREW_LINE"; fi
+  add_line zprofile-path "$PATH_LINE"
+
+  mkdir -p "$LA" "$LOGS"
+  local herdr env
+  herdr=$(command -v herdr)
+  env="<key>PATH</key><string>$SVC_PATH</string>"
+  if loaded dev.bable.herdr || ! herdr_running; then
+    put_plist dev.bable.herdr <<EOF
+  <key>ProgramArguments</key><array><string>$herdr</string><string>server</string></array>
+  <key>WorkingDirectory</key><string>$FM</string>
+  <key>EnvironmentVariables</key><dict>$env</dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>$LOGS/herdr.log</string>
+  <key>StandardErrorPath</key><string>$LOGS/herdr.log</string>
+EOF
+  else
+    kept "herdr server already running outside bable"
+  fi
+  put_plist dev.bable.stall-nudge <<EOF
+  <key>ProgramArguments</key><array><string>$SRC/libexec/fm-main-stall-nudge</string></array>
+  <key>EnvironmentVariables</key><dict>$env<key>FM_HOME</key><string>$FM</string><key>HERDR_BIN_PATH</key><string>$herdr</string><key>HERDR_SESSION</key><string>default</string></dict>
+  <key>StartInterval</key><integer>15</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>$LOGS/stall-nudge.log</string>
+  <key>StandardErrorPath</key><string>$LOGS/stall-nudge.log</string>
+EOF
+
+  echo "bable: $N changed"
+  status
+}
+
+svc() {
+  local label=$1 name=$2 detail=loaded
+  if loaded "$label"; then
+    if [ "$name" = herdr ] && launchctl print "gui/$(id -u)/$label" | grep -q 'state = running'; then detail="loaded, running"; fi
+    row ok "$name" "$detail"
+  elif ! services && [ -f "$LA/$label.plist" ]; then
+    row ok "$name" "plist written (services off)"
+  elif [ "$name" = herdr ] && herdr_running; then
+    row ok "$name" "herdr server running outside bable"
+  else
+    row miss "$name" "run: bable setup"
+  fi
+}
+
+status() {
+  local t p src dst pm
+  echo "bable: status"
+  for t in $TOOLS; do
+    if p=$(command -v "$t"); then row ok "$t" "$p"; else row miss "$t" "run: bable setup"; fi
+  done
+  while read -r src dst; do
+    if [ -e "$HOME/$dst" ]; then row ok config "$HOME/$dst"; else row miss config "$HOME/$dst  run: bable setup"; fi
+  done < <(seeds)
+  if [ -d "$FM/.git" ]; then
+    row ok firstmate "$FM ($(git -C "$FM" branch --show-current))"
+  else
+    row miss firstmate "run: bable setup"
+  fi
+  svc dev.bable.herdr herdr
+  svc dev.bable.stall-nudge stall-nudge
+  if gh auth status >/dev/null 2>&1; then row ok "gh sign-in" "signed in"; else row todo "gh sign-in" "run: gh auth login --web"; fi
+  if [ -f "$HOME/.omp/agent/agent.db" ]; then row ok "omp sign-in" "credential store present"; else row todo "omp sign-in" "run: omp, then /login"; fi
+  if nc -z -G 1 127.0.0.1 22 >/dev/null 2>&1; then
+    row ok "remote login" "ssh on port 22"
+  else
+    note "Remote Login off: System Settings > General > Sharing > Remote Login"
+  fi
+  if pmset -g batt 2>/dev/null | grep -q InternalBattery; then
+    if loaded dev.bable.awake; then row ok awake on; else note "keep agents running: bable awake on (lid closed without a display still sleeps)"; fi
+  else
+    pm=$(pmset -g 2>/dev/null || true)
+    [ "$(awk '$1 == "sleep" { print $2; exit }' <<<"$pm")" = 0 ] || note "run: sudo pmset -a sleep 0"
+    [ "$(awk '$1 == "autorestart" { print $2; exit }' <<<"$pm")" = 1 ] || note "run: sudo pmset -a autorestart 1"
+    [ "$(fdesetup isactive 2>/dev/null || true)" != true ] || note "FileVault on: after a power cut agents wait for a GUI login"
+  fi
+  return "$FAIL"
+}
+
+update() {
+  local t list tag old new
+  if [ "$SRC" = "$HOME/.local/share/bable/src" ]; then git -C "$SRC" pull --ff-only; fi
+  old=$(herdr --version 2>/dev/null || true)
+  list=$(m_list brew | grep -vx brew || true)
+  if [ -n "$list" ]; then xargs brew upgrade <<<"$list"; fi
+  for t in $(m_list script); do install_script "$t"; done
+  for t in $(m_list bun); do bun add -g "$(pkg_of "$t")@latest"; done
+  for t in $(m_list release); do
+    tag=$(latest_tag "$t")
+    if ! grep -qx "$t release $tag" "$MANIFEST"; then
+      grep -v "^$t release " "$MANIFEST" > "$MANIFEST.tmp" || true
+      mv "$MANIFEST.tmp" "$MANIFEST"
+      install_release "$t"
+    fi
+  done
+  if m_has firstmate clone; then
+    if [ -z "$(git -C "$FM" status --porcelain)" ]; then git -C "$FM" pull --ff-only; else kept "firstmate has local changes"; fi
+  fi
+  new=$(herdr --version 2>/dev/null || true)
+  if [ "$old" != "$new" ] && loaded dev.bable.herdr; then
+    echo "  ! herdr upgraded; restart to apply: launchctl kickstart -k gui/$(id -u)/dev.bable.herdr"
+  fi
+  exec "$SRC/bin/bable" setup
+}
+
+uninstall() {
+  local f label name method extra line
+  for f in "$LA"/dev.bable.*.plist; do
+    [ -e "$f" ] || continue
+    label=$(basename "$f" .plist)
+    if services && loaded "$label"; then
+      if [ "$label" = dev.bable.herdr ]; then echo "bable: stopping dev.bable.herdr ends its herdr sessions"; fi
+      launchctl bootout "gui/$(id -u)/$label" || true
+    fi
+    rm -f "$f"
+    echo "  - $f"
+  done
+  if [ -f "$MANIFEST" ]; then
+    while read -r name method extra; do
+      case $method in
+        release) rm -f "$HOME/.local/bin/$name"; echo "  - $HOME/.local/bin/$name" ;;
+        cfg)
+          if cmp -s "$SRC/config/$extra" "$HOME/$name"; then
+            rm -f "$HOME/$name"; echo "  - $HOME/$name"
+          elif [ -e "$HOME/$name" ]; then
+            kept "$HOME/$name edited"
+          fi ;;
+        zprofile)
+          line=$PATH_LINE
+          if [ "$name" = zprofile-brew ]; then line=$BREW_LINE; fi
+          if [ -f "$HOME/.zprofile" ]; then
+            grep -vxF "$line" "$HOME/.zprofile" > "$STATE/zprofile" || true
+            cat "$STATE/zprofile" > "$HOME/.zprofile"
+            echo "  - $HOME/.zprofile: $line"
+          fi ;;
+        brew)
+          if [ "$name" = brew ]; then MANUAL="$MANUAL
+    Homebrew: https://github.com/Homebrew/install#uninstall-homebrew"; else MANUAL="$MANUAL
+    brew uninstall $name"; fi ;;
+        bun) MANUAL="$MANUAL
+    bun remove -g $(pkg_of "$name")" ;;
+        script)
+          case $name in
+            bun) MANUAL="$MANUAL
+    rm -rf $HOME/.bun" ;;
+            uv) MANUAL="$MANUAL
+    rm $HOME/.local/bin/uv $HOME/.local/bin/uvx" ;;
+            *) MANUAL="$MANUAL
+    rm $HOME/.local/bin/$name" ;;
+          esac ;;
+        clone) MANUAL="$MANUAL
+    rm -rf $FM" ;;
+      esac
+    done < "$MANIFEST"
+  fi
+  if [ -n "$MANUAL" ]; then echo "bable: kept these; remove them yourself if you want:$MANUAL"; fi
+  rm -f "$HOME/.local/bin/bable"
+  rm -rf "$STATE"
+  echo "bable: uninstalled"
+  if [ -d "$HOME/.local/share/bable" ]; then rm -rf "$HOME/.local/share/bable"; fi
+}
+
+awake() {
+  case "${1:-}" in
+    on)
+      mkdir -p "$LA"
+      put_plist dev.bable.awake <<EOF
+  <key>ProgramArguments</key><array><string>/usr/bin/caffeinate</string><string>-ims</string></array>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><true/>
+EOF
+      echo "bable: awake on. A closed lid without an external display still sleeps." ;;
+    off)
+      if services && loaded dev.bable.awake; then launchctl bootout "gui/$(id -u)/dev.bable.awake" || true; fi
+      rm -f "$LA/dev.bable.awake.plist"
+      echo "bable: awake off" ;;
+    *) usage ;;
+  esac
+}
+
+usage() {
+  echo "usage: bable setup | status | update | uninstall | awake on|off" >&2
+  exit 2
+}
+
+case "${1:-}" in
+  setup) setup ;;
+  status) status ;;
+  update) update ;;
+  uninstall) uninstall ;;
+  awake) awake "${2:-}" ;;
+  *) usage ;;
+esac
