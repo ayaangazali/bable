@@ -189,7 +189,7 @@ EOF
 svc() {
   local label=$1 name=$2 detail=loaded
   if loaded "$label"; then
-    if [ "$name" = herdr ] && launchctl print "gui/$(id -u)/$label" | grep -q 'state = running'; then detail="loaded, running"; fi
+    if [ "$name" = herdr ] && launchctl print "gui/$(id -u)/$label" | grep 'state = running' >/dev/null; then detail="loaded, running"; fi
     row ok "$name" "$detail"
   elif ! services && [ -f "$LA/$label.plist" ]; then
     row ok "$name" "plist written (services off)"

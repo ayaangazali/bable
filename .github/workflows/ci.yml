@@ -41,10 +41,10 @@ jobs:
       - name: Launch agents are running
         run: |
           for _ in $(seq 10); do
-            if launchctl print "gui/$(id -u)/dev.bable.herdr" | grep -q 'state = running'; then break; fi
+            if launchctl print "gui/$(id -u)/dev.bable.herdr" | grep 'state = running' >/dev/null; then break; fi
             sleep 1
           done
-          launchctl print "gui/$(id -u)/dev.bable.herdr" | grep -q 'state = running'
+          launchctl print "gui/$(id -u)/dev.bable.herdr" | grep 'state = running' >/dev/null
           launchctl print "gui/$(id -u)/dev.bable.stall-nudge" >/dev/null
 
       - name: Second install changes nothing
