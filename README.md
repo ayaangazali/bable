@@ -31,7 +31,7 @@ The installer ends with `bable status`. Run it again any time:
 ```text
   ok    herdr         loaded, running
   todo  gh sign-in    run: gh auth login --web
-  todo  omp sign-in   run: omp login
+  todo  omp sign-in   run: omp, then /login
 ```
 
 When the installer adds `~/.local/bin` and `~/.bun/bin` to `PATH` in `~/.zprofile`, open a new terminal (or run `source ~/.zprofile`) before running `bable`, `omp` or `herdr`.
@@ -41,7 +41,7 @@ When the installer adds `~/.local/bin` and `~/.bun/bin` to `PATH` in `~/.zprofil
 ## Sign in
 
 1. GitHub: `gh auth login --web`. Open the printed URL on any device and enter the code.
-2. omp: `omp login` (for Anthropic, `omp login anthropic`) and follow the provider link. Check with `omp models --json`.
+2. omp: start `omp`, finish the first-run screens, then type `/login` (for Anthropic, `/login anthropic`) and follow the provider link. Check with `omp models --json`.
 
 ## Start Firstmate
 

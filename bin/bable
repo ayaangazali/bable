@@ -225,7 +225,7 @@ status() {
   svc dev.bable.herdr herdr
   svc dev.bable.stall-nudge stall-nudge
   if gh auth status >/dev/null 2>&1; then row ok "gh sign-in" "signed in"; else row todo "gh sign-in" "run: gh auth login --web"; fi
-  if sqlite3 -readonly "$HOME/.omp/agent/agent.db" 'select 1 from auth_credentials limit 1' 2>/dev/null | grep -qx 1; then row ok "omp sign-in" "signed in"; else row todo "omp sign-in" "run: omp login"; fi
+  if sqlite3 -readonly "$HOME/.omp/agent/agent.db" 'select 1 from auth_credentials where disabled_cause is null limit 1' 2>/dev/null | grep -qx 1; then row ok "omp sign-in" "signed in"; else row todo "omp sign-in" "run: omp, then /login"; fi
   if have herdr && ! herdr config check >/dev/null 2>&1; then note "herdr does not accept ~/.config/herdr/config.toml; run: herdr update, then herdr config check"; fi
   if nc -z -G 1 127.0.0.1 22 >/dev/null 2>&1; then
     row ok "remote login" "ssh on port 22"

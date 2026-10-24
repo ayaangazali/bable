@@ -117,7 +117,7 @@ jobs:
         run: |
           env -u GH_TOKEN -u GITHUB_TOKEN ~/.local/bin/bable status | tee st
           grep 'gh auth login --web' st
-          grep 'todo  omp sign-in   run: omp login' st
+          grep 'todo  omp sign-in   run: omp, then /login' st
 
       - name: omp answers a prompt (needs an ANTHROPIC_API_KEY secret)
         timeout-minutes: 5
