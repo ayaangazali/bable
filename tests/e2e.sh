@@ -54,11 +54,20 @@ run_bable "$T/.local/bin/bable" setup > "$STUB/out2" 2>&1 || { cat "$STUB/out2";
 grep -q 'bable: 0 changed' "$STUB/out2" || { cat "$STUB/out2"; fail "second setup changed something"; }
 [ "$(snapshot)" = "$before" ] || fail "second setup rewrote files"
 
+CASE="update"
+run_bable "$T/.local/bin/bable" update > "$STUB/outu" 2>&1 || { cat "$STUB/outu"; fail "update exited non-zero"; }
+grep -q 'bable: 0 changed' "$STUB/outu" || { cat "$STUB/outu"; fail "update did not return to 0 changed"; }
+
 CASE="status"
 run_bable "$T/.local/bin/bable" status > "$STUB/out3" 2>&1 || { cat "$STUB/out3"; fail "status exited non-zero"; }
 grep -q '^  [a-z]* *gh ' "$STUB/out3" || fail "no gh line"
 grep -q 'omp sign-in' "$STUB/out3" || fail "no omp sign-in line"
 if grep -q '^  miss' "$STUB/out3"; then cat "$STUB/out3"; fail "status reports missing items"; fi
+
+CASE="extra arguments"
+rc=0
+run_bable "$T/.local/bin/bable" status extra > /dev/null 2>&1 || rc=$?
+[ "$rc" = 2 ] || fail "bable status extra exited $rc, not 2"
 
 CASE="uninstall"
 run_bable "$T/.local/bin/bable" uninstall > "$STUB/out4" 2>&1 || { cat "$STUB/out4"; fail "uninstall exited non-zero"; }
@@ -72,6 +81,10 @@ cmp -s "$STUB/sentinel" "$T/.no-mistakes/config.yaml" || fail "user config remov
 [ ! -e "$T/.omp" ] || fail "empty seed folder left behind"
 [ ! -e "$T/Library/Logs/bable" ] || fail "log folder left behind"
 run_bable "$ROOT/bin/bable" uninstall > "$STUB/out5" 2>&1 || { cat "$STUB/out5"; fail "second uninstall exited non-zero"; }
+
+CASE="reinstall"
+(cd "$ROOT" && run_bable ./install.sh) > "$STUB/out8" 2>&1 || { cat "$STUB/out8"; fail "reinstall exited non-zero"; }
+[ -L "$T/.local/bin/bable" ] || fail "reinstall left no ~/.local/bin/bable"
 
 CASE="piped install, herdr already on PATH"
 cat > "$STUB/herdr" <<'EOF'
@@ -87,5 +100,14 @@ herdr=$(plutil -extract ProgramArguments.0 raw "$T3/Library/LaunchAgents/dev.bab
 [ ! -e "$T3/.local/bin/herdr" ] || fail "installed a second herdr"
 in_home "$T3" "$STUB:$PATH" "$T3/.local/bin/bable" uninstall > "$STUB/out7" 2>&1 || { cat "$STUB/out7"; fail "uninstall exited non-zero"; }
 [ ! -e "$T3/.local/share/bable" ] || fail ".local/share/bable left behind"
+
+CASE="stall-nudge without a main pane"
+mkdir -p "$T/firstmate/state/inbox"
+touch -t 202001010000 "$T/firstmate/state/inbox/e2e.note"
+nudge() { in_home "$T" "$PATH" FM_HOME="$T/firstmate" HERDR_BIN_PATH="$STUB/herdr" "$ROOT/libexec/fm-main-stall-nudge"; }
+if nudge 2> "$STUB/n1"; then fail "nudge without a main pane exited 0"; fi
+grep -q 'no main pane' "$STUB/n1" || { cat "$STUB/n1"; fail "missing main pane not logged"; }
+nudge 2> "$STUB/n2" || { cat "$STUB/n2"; fail "nudge within GAP exited non-zero"; }
+[ ! -s "$STUB/n2" ] || { cat "$STUB/n2"; fail "nudge within GAP logged again"; }
 
 echo "e2e: all cases passed"

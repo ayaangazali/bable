@@ -19,7 +19,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: shellcheck -e SC1091 install.sh bin/bable libexec/fm-main-stall-nudge tests/e2e.sh
 
   e2e:
@@ -29,46 +29,150 @@ jobs:
       matrix:
         os: ${{ fromJSON(contains('schedule workflow_dispatch', github.event_name) && '["macos-15", "macos-26", "macos-15-intel", "macos-26-intel"]' || '["macos-26"]') }}
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 30
+    timeout-minutes: 40
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
       - name: End-to-end test in a throwaway HOME
         run: tests/e2e.sh
 
-      - name: Real install
-        run: env -u GH_TOKEN -u GITHUB_TOKEN ./install.sh | tee out1
-
-      - name: Launch agents are running
+      - name: Real install, with gh left for Homebrew
         run: |
-          for _ in $(seq 10); do
-            if launchctl print "gui/$(id -u)/dev.bable.herdr" | grep 'state = running' >/dev/null; then break; fi
+          brew uninstall --ignore-dependencies gh
+          env -u GH_TOKEN -u GITHUB_TOKEN ./install.sh | tee out1
+          grep '+ gh (Homebrew)' out1
+
+      - name: Herdr client reaches dev.bable.herdr and applies the seeded config
+        run: |
+          h=~/.local/bin/herdr
+          for _ in $(seq 20); do
+            if $h status server --json | jq -e .running >/dev/null; then break; fi
             sleep 1
           done
-          launchctl print "gui/$(id -u)/dev.bable.herdr" | grep 'state = running' >/dev/null
-          launchctl print "gui/$(id -u)/dev.bable.stall-nudge" >/dev/null
+          launchctl print "gui/$(id -u)/dev.bable.herdr" | grep 'state = running'
+          $h status server --json | jq -e '.running and .compatible'
+          $h server reload-config | jq -e '.result.status == "applied" and (.result.diagnostics | length) == 0'
+          $h pane list --session default | jq -e '.result.panes'
+
+      - name: Installed tools run and seeded configs load
+        run: |
+          export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
+          for t in git gh node jq uv herdr bun omp acpx no-mistakes treehouse; do "$t" --version; done
+          herdr config check
+          omp config get enabledModels --json | jq -e '.value | length > 0'
+          acpx config show | jq -e '.loaded.global and .agents.omp.command == "omp acp"'
+          no-mistakes doctor | tee doctor
+          grep 'acp:omp is runnable' doctor
+
+      - name: stall-nudge runs clean
+        run: |
+          L=gui/$(id -u)/dev.bable.stall-nudge
+          launchctl kickstart "$L"
+          for _ in $(seq 20); do
+            if launchctl print "$L" | grep 'last exit code = 0' >/dev/null; then break; fi
+            sleep 1
+          done
+          launchctl print "$L" | grep 'last exit code = 0'
+          [ ! -s ~/Library/Logs/bable/stall-nudge.log ]
+
+      - name: Firstmate starts in a Herdr pane
+        run: |
+          h=~/.local/bin/herdr
+          p=$($h workspace create --cwd ~/firstmate | jq -r .result.root_pane.pane_id)
+          $h pane run "$p" 'cd ~/firstmate && exec omp'
+          $h pane wait-output "$p" --match 'Sign in' --timeout 60000 >/dev/null
+          for _ in $(seq 30); do
+            if $h agent get "$p" | jq -e '.result.agent.agent == "omp"' >/dev/null; then break; fi
+            sleep 1
+          done
+          $h agent get "$p" | jq -e --arg fm ~/firstmate '.result.agent.agent == "omp" and .result.agent.foreground_cwd == $fm'
+          echo "PANE=$p" >> "$GITHUB_ENV"
+
+      - name: stall-nudge nudges the Firstmate pane
+        run: |
+          mkdir -p ~/firstmate/state/inbox
+          touch -t 202001010000 ~/firstmate/state/inbox/ci.note
+          launchctl kickstart "gui/$(id -u)/dev.bable.stall-nudge"
+          log=~/Library/Logs/bable/stall-nudge.log
+          for _ in $(seq 30); do
+            if [ -s "$log" ]; then break; fi
+            sleep 1
+          done
+          cat "$log"
+          grep -E "nudged default:$PANE:|nudge uncertain for default:$PANE:" "$log"
+          ~/.local/bin/herdr pane read "$PANE" | grep 'stall watchdog'
+          rm -rf ~/firstmate/state/inbox
 
       - name: Second install changes nothing
         run: |
           ./install.sh | tee out2
-          grep -q 'bable: 0 changed' out2
+          grep 'bable: 0 changed' out2
+
+      - name: Update returns to 0 changed
+        run: |
+          env -u GH_TOKEN -u GITHUB_TOKEN ~/.local/bin/bable update | tee up
+          grep 'bable: 0 changed' up
 
       - name: Status
         run: |
           env -u GH_TOKEN -u GITHUB_TOKEN ~/.local/bin/bable status | tee st
-          grep -q 'gh auth login --web' st
+          grep 'gh auth login --web' st
+          grep 'todo  omp sign-in   run: omp login' st
 
-      - name: Uninstall
+      - name: omp answers a prompt (needs an ANTHROPIC_API_KEY secret)
+        timeout-minutes: 5
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          ~/.local/bin/bable uninstall
+          if [ -z "$ANTHROPIC_API_KEY" ]; then echo "no ANTHROPIC_API_KEY secret: skipped"; exit 0; fi
+          ~/.bun/bin/omp -p --no-session 'Reply with the single word pong.' | tee reply
+          grep -i pong reply
+
+      - name: Service logs
+        run: tail -n +1 ~/Library/Logs/bable/*.log
+
+      - name: Uninstall stops Herdr
+        run: |
+          ~/.local/bin/bable uninstall | tee un
+          grep 'brew uninstall gh' un
           if ls ~/Library/LaunchAgents/dev.bable.* 2>/dev/null; then exit 1; fi
           if launchctl print "gui/$(id -u)/dev.bable.herdr" >/dev/null 2>&1; then exit 1; fi
+          for _ in $(seq 10); do
+            if ! pgrep -f "$HOME/.local/bin/herdr server" >/dev/null; then break; fi
+            sleep 1
+          done
+          if pgrep -f "$HOME/.local/bin/herdr server"; then exit 1; fi
+          if ~/.local/bin/herdr status server | grep -x 'status: running'; then exit 1; fi
+
+      - name: Reinstall after uninstall
+        run: |
+          env -u GH_TOKEN -u GITHUB_TOKEN ./install.sh | tee out3
+          for _ in $(seq 20); do
+            if ~/.local/bin/herdr status server --json | jq -e .running >/dev/null; then break; fi
+            sleep 1
+          done
+          ~/.local/bin/herdr status server --json | jq -e .running
 
       - if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: bable-${{ matrix.os }}
+          include-hidden-files: true
           path: |
             ~/Library/Logs/bable
             ~/.local/state/bable
           if-no-files-found: ignore
+
+  one-liner:
+    if: github.ref == 'refs/heads/main'
+    runs-on: macos-26
+    timeout-minutes: 30
+    steps:
+      - name: Public one-line install
+        run: curl -fsSL https://raw.githubusercontent.com/ayaangazali/bable/main/install.sh | bash
+
+      - name: Update pulls bable and returns to 0 changed
+        run: |
+          test -x ~/.local/share/bable/src/bin/bable
+          ~/.local/bin/bable update | tee up
+          grep 'bable: 0 changed' up

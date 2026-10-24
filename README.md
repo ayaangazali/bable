@@ -24,14 +24,14 @@ Or in one line:
 curl -fsSL https://raw.githubusercontent.com/ayaangazali/bable/main/install.sh | bash
 ```
 
-The one-line form clones bable into `~/.local/share/bable/src`. While the repository is private, the raw URL and the clone need GitHub access, so use `gh repo clone ayaangazali/bable` and `./install.sh` instead.
+The one-line form clones bable into `~/.local/share/bable/src`.
 
 The installer ends with `bable status`. Run it again any time:
 
 ```text
   ok    herdr         loaded, running
   todo  gh sign-in    run: gh auth login --web
-  todo  omp sign-in   run: omp, then /login
+  todo  omp sign-in   run: omp login
 ```
 
 When the installer adds `~/.local/bin` and `~/.bun/bin` to `PATH` in `~/.zprofile`, open a new terminal (or run `source ~/.zprofile`) before running `bable`, `omp` or `herdr`.
@@ -41,7 +41,7 @@ When the installer adds `~/.local/bin` and `~/.bun/bin` to `PATH` in `~/.zprofil
 ## Sign in
 
 1. GitHub: `gh auth login --web`. Open the printed URL on any device and enter the code.
-2. omp: start `omp`, finish the first-run screens, then type `/login` (for Anthropic, `/login anthropic`) and follow the provider link. Check with `omp models --json`.
+2. omp: `omp login` (for Anthropic, `omp login anthropic`) and follow the provider link. Check with `omp models --json`.
 
 ## Start Firstmate
 
@@ -52,7 +52,7 @@ herdr
 cd ~/firstmate && exec omp
 ```
 
-`exec` makes quitting omp close the pane. Herdr does not resume agents after its server restarts (`resume_agents_on_restore = false`), so start main again the same way. Every 15 seconds `dev.bable.stall-nudge` checks whether main has stalled with a waiting note or wake, and types a nudge into its pane.
+Then type your request in that omp pane, for example `look at my GitHub project xyz and fix its failing tests`. `exec` makes quitting omp close the pane. Herdr does not resume agents after its server restarts (`resume_agents_on_restore = false`), so start main again the same way. Every 15 seconds `dev.bable.stall-nudge` checks whether main has stalled with a waiting note or wake, and types a nudge into its pane.
 
 ## Mac mini
 
@@ -114,4 +114,6 @@ The seeded configs come from Crewship, without their comments:
 tests/e2e.sh
 ```
 
-It runs the real installer in throwaway home folders with `BABLE_NO_SERVICES=1`, which writes and lints the launch agents but never loads them. CI runs it on macOS, then installs for real, checks the launch agents run, installs again, and uninstalls. Pushes to `main` and pull requests use one Apple silicon runner, because macOS minutes cost ten times as much on a private repository. The nightly run and manual runs (`workflow_dispatch`) cover macOS 15 and 26 on Apple silicon and Intel against the latest upstream releases.
+It runs the real installer in throwaway home folders with `BABLE_NO_SERVICES=1`, which writes and lints the launch agents but never loads them. CI runs it on macOS, then installs for real: it checks every tool runs and the seeded omp, acpx, no-mistakes and Herdr configs load, talks to the `dev.bable.herdr` server, starts Firstmate in a Herdr pane, makes `dev.bable.stall-nudge` nudge it, runs `bable update`, uninstalls and installs again. Pushes to `main` and pull requests use one Apple silicon runner. The nightly run and manual runs (`workflow_dispatch`) cover macOS 15 and 26 on Apple silicon and Intel against the latest upstream releases.
+
+On `main` (pushes, the nightly run and manual runs), a separate job also installs with the public one-line command. With an `ANTHROPIC_API_KEY` repository secret, CI also asks omp for a reply; without it that step is skipped.

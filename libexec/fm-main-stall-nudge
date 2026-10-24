@@ -52,6 +52,7 @@ PY
   [ -n "$board_key" ] && reason="an answer on Lavish board $board has no reply"
 fi
 [ -z "$reason" ] && exit 0
+echo "$now" > "$STAMP"
 
 if [ -z "$MAIN_PANE" ]; then
   MAIN_PANE=$(HERDR_SESSION=$SESSION "$HERDR" pane list --session "$SESSION" 2>/dev/null \
@@ -66,7 +67,6 @@ target=$SESSION:$MAIN_PANE
 cd "$FM_HOME" || exit 1
 . bin/fm-backend.sh
 msg="stall watchdog: $reason. Run bin/fm-wake-drain.sh, answer every operator note and reply to any answered Lavish board now."
-echo "$now" > "$STAMP"
 out=$(fm_backend_send_text_submit herdr "$target" "$msg" 2 0.4 0.3)
 rc=$?
 verdict=${out##*$'\n'}
