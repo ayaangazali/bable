@@ -1,0 +1,108 @@
+enabledModels:
+  - anthropic/claude-opus-5-5
+  - anthropic/claude-fable-5-1
+  - anthropic/claude-haiku-5-5
+  - anthropic/claude-sonnet-5-5
+  - openai/gpt-6.1-sol
+  - openai/gpt-6-astra
+  - openai/gpt-6-luna
+  - openai-codex/gpt-6.1-sol
+  - openai-codex/gpt-6-astra
+  - openai-codex/gpt-6-luna
+  - inception/mercury-3
+modelRoles:
+  designer: anthropic/claude-fable-5-1
+  smol: anthropic/claude-sonnet-5-5:off
+  slow: anthropic/claude-fable-5-1:xhigh
+  vision: anthropic/claude-opus-5-5:auto
+  plan: anthropic/claude-fable-5-1
+  commit: anthropic/claude-haiku-5-5
+  tiny: anthropic/claude-haiku-5-5
+  advisor: anthropic/claude-opus-5-5:auto
+  task: anthropic/claude-opus-5-5:auto
+  subagent: anthropic/claude-opus-5-5:auto
+  default: anthropic/claude-opus-5-5:high
+  memory: anthropic/claude-haiku-5-5
+advisor:
+  enabled: false
+  immuneTurns: 4
+  syncBacklog: '1'
+theme:
+  dark: dark-rose-pine
+symbolPreset: nerd
+defaultThinkingLevel: auto
+hideThinkingBlock: true
+extendedContext: true
+tier:
+  openai: priority
+autocompleteMaxVisible: 10
+steeringMode: one-at-a-time
+followUpMode: all
+interruptMode: immediate
+includeModelInPrompt: false
+readLineNumbers: true
+omitThinking: true
+textVerbosity: low
+cycleOrder:
+- smol
+- default
+- slow
+- subagent
+colorBlindMode: false
+statusLine:
+  preset: custom
+  compactThinkingLevel: true
+  leftSegments:
+  - path
+  - git
+  - model
+  - mode
+  - status
+  rightSegments:
+  - context_pct
+  - token_rate
+  - subagents
+  - cost
+  - time_spent
+  segmentOptions:
+    model:
+      showThinkingLevel: true
+    git:
+      showBranch: true
+  showHookStatus: false
+  sessionAccent: false
+  separator: powerline
+  transparent: true
+composer:
+  shape: borderless
+mnemopi:
+  noEmbeddings: true
+  llmMode: smol
+  polyphonicRecall: true
+  enhancedRecall: true
+  proactiveLinking: true
+memory:
+  backend: mnemopi
+task:
+  maxConcurrency: 128
+tui:
+  vimMode: true
+  vimModeDisplay: icon
+compaction:
+  methodOrder: [snapcompact, remote, handoff, shake, soft]
+  thresholdTokens: 200000
+  v2RetainedMessageBudget: 32000
+tools:
+  artifactSpillThreshold: 20
+  artifactHeadBytes: 4
+  artifactTailBytes: 4
+retry:
+  fallbackChains:
+    anthropic/claude-opus-5-5:
+    - anthropic/claude-fable-5-1:medium
+    anthropic/claude-fable-5-1:
+    - anthropic/claude-opus-5-5
+    anthropic/claude-sonnet-5-5:
+    - anthropic/claude-fable-5-1
+    - anthropic/claude-opus-5-5
+  maxDelayMs: 60000

@@ -1,0 +1,28 @@
+onboarding = false
+
+[theme]
+name = "rose-pine"
+auto_switch = false
+
+[theme.custom]
+sidebar_bg = "reset"
+
+[ui]
+sidebar_width = 46
+sidebar_max_width = 56
+show_agent_labels_on_pane_borders = true
+agent_panel_sort = "spaces"
+status_indicators = "symbols"
+
+[ui.toast]
+delivery = "terminal"
+
+[update]
+channel = "stable"
+
+[server]
+headless_cols = 120
+headless_rows = 40
+
+[session]
+resume_agents_on_restore = false
