@@ -67,8 +67,7 @@ jobs:
           jq -e '.providers.inception' ~/.omp/agent/models.yml
           plutil -extract EnvironmentVariables.CHROME_DEVTOOLS_AXI_MCP_PATH raw ~/Library/LaunchAgents/dev.bable.herdr.plist | xargs test -f
           zsh -c 'command -v herdr omp bable'
-          ponytail-review --help | grep USAGE >/dev/null && test -f ~/.omp/plugins/cache/marketplaces/ponytail/commands/ponytail-review.toml
-          mate-archive --help
+          test -f ~/.omp/plugins/cache/marketplaces/ponytail/commands/ponytail-review.toml
           herdr config check
           omp config get enabledModels --json | jq -e '.value | length > 0'
           acpx config show | jq -e '.loaded.global and .agents.omp.command == "omp acp"'

@@ -91,9 +91,8 @@ From [Crewship](https://github.com/i098/Crewship) at a pinned commit, which babl
 
 - Configs, only where no file exists yet: `~/.omp/agent/config.yml`, `~/.omp/agent/lsp.json`, `~/.acpx/config.json`, `~/.no-mistakes/config.yaml`, `~/.config/btop/btop.conf`, and LazyVim in `~/.config/nvim` when that folder is missing or empty. `~/.config/herdr/config.toml` comes from bable.
 - `~/.omp/agent/models.yml`: Crewship's model overrides, merged into your file on every setup. Your own providers stay.
-- omp extensions, rewritten on every setup, in `~/.omp/agent/extensions`: the Herdr sidebar feed, mode icons, the `pkill`/`killall` block, the Opus effort cap, the turn-end quality gate (sentrux and fallow), unii memory and gluttony.
+- omp extensions, rewritten on every setup unless the file was there before bable, in `~/.omp/agent/extensions`: the Herdr sidebar feed, mode icons, the `pkill`/`killall` block, the Opus effort cap, the turn-end quality gate (sentrux and fallow), unii memory and gluttony.
 - The omp plugins ponytail, i-have-adhd and caveman, and Herdr's omp integration, so Herdr shows each omp pane's real state.
-- `ponytail-review` and `mate-archive` in `~/.local/bin`.
 - A guard in front of `gh` and `gh-axi` that blocks issue and API writes without an explicit repository. bable does not add it if a `~/.local/bin/gh` of your own exists.
 - Firstmate's dispatch settings in `~/firstmate/config` (crew harness, the second mate harness, `crew-dispatch.json` model routing, the crew brief, the startup memory budget, the flat Herdr layout and the churn flag), plus the stuck-composer check, registered with Firstmate.
 - The vision and security-audit skills for omp and Claude Code, and the kun skill.
@@ -101,14 +100,14 @@ From [Crewship](https://github.com/i098/Crewship) at a pinned commit, which babl
 Also:
 
 - Launch agents `dev.bable.herdr` (with a 10240 open-file limit) and `dev.bable.stall-nudge`.
-- The `PATH` and `CHROME_DEVTOOLS_AXI_MCP_PATH` lines in `~/.zprofile` and `~/.zshenv`, so SSH and mosh commands find `herdr` too (plus Homebrew's `shellenv` line when bable installed formulas from `/opt/homebrew` and it was not on your `PATH`).
+- The `PATH` line, and the `CHROME_DEVTOOLS_AXI_MCP_PATH` line when bable's chrome-devtools-mcp is there, in `~/.zprofile` and `~/.zshenv`, so SSH and mosh commands find `herdr` too. Homebrew's `shellenv` line goes in `~/.zprofile` only, when bable installed formulas from `/opt/homebrew` and it was not on your `PATH`.
 
 bable records each item in `~/.local/state/bable/manifest`, so update and uninstall act only on what bable added.
 
 ## What bable never touches
 
 - A tool already on your `PATH`. bable uses it and never installs a second copy. Only `bable update` upgrades, and only what bable installed.
-- A config file that already exists.
+- A config, extension or Firstmate setting file that already exists.
 - A Herdr server that bable did not start. bable reports it and writes no Herdr launch agent.
 - Launch agents outside `dev.bable.*`.
 - System settings (`pmset`, sharing, login items) and anything needing `sudo`.

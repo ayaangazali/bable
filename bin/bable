@@ -65,9 +65,7 @@ managed() {
     "blueprint/config/omp-quality-gate.ts $e/crewship-quality-gate.ts 644" \
     "blueprint/config/omp-unii-memory.ts $e/fm-unii-memory.ts 644" \
     "apps/imessage/memory.ts $e/fm-unii-memory/memory.ts 644" \
-    "blueprint/config/fm-gluttony.ts $e/fm-gluttony.ts 644" \
-    "blueprint/maintenance/ponytail-review .local/bin/ponytail-review 755" \
-    "blueprint/maintenance/mate-archive .local/bin/mate-archive 755"
+    "blueprint/config/fm-gluttony.ts $e/fm-gluttony.ts 644"
   for f in crew-harness secondmate-harness crew-dispatch.json brief-include.md startup-memory-budget herdr-presentation-spaces turnend-churn-absorb; do
     echo "blueprint/config/$f firstmate/config/$f 644"
   done
@@ -186,7 +184,8 @@ put_plist() {
 
 rc_line() {
   local key=$1 line=$2 f
-  for f in .zprofile .zshenv; do
+  shift 2
+  for f in "$@"; do
     if ! grep -qxF "$line" "$HOME/$f" 2>/dev/null; then
       echo "$line" >> "$HOME/$f"
       m_add "$key rc $f"
@@ -198,9 +197,9 @@ rc_line() {
 line_of() { case $1 in rc-brew) echo "$BREW_LINE" ;; rc-mcp) echo "$MCP_LINE" ;; *) echo "$PATH_LINE" ;; esac; }
 
 put() {
-  local src dst=$HOME/$2
-  src=$(from "$1")
+  local src=$1 dst=$HOME/$2
   cmp -s "$src" "$dst" && return 0
+  if [ -e "$dst" ] && ! m_has "$2" managed; then kept "$dst"; return 0; fi
   mkdir -p "$(dirname "$dst")"
   install -m "$3" "$src" "$dst"
   m_has "$2" managed || m_add "$2 managed"
@@ -253,17 +252,12 @@ guard() {
 }
 
 stuck_composer() {
-  local tmp dst=$FM/state/stuck-composer.check.sh
+  local tmp
   tmp=$(mktemp)
   sed -e "s#{{ crewship_firstmate_dir | quote }}#'$FM'#" -e 's/{{ crewship_stuck_composer_msg_age }}/120/g' \
     -e 's/{{ crewship_stuck_composer_hold }}/120/g' -e 's/{{ crewship_stuck_composer_poll }}/30/g' -e 's/sha1sum/shasum/' \
     "$CS/blueprint/ansible/templates/stuck-composer.check.sh.j2" > "$tmp"
-  mkdir -p "$FM/state"
-  if ! cmp -s "$tmp" "$dst"; then
-    install -m 0700 "$tmp" "$dst"
-    m_has firstmate/state/stuck-composer.check.sh managed || m_add "firstmate/state/stuck-composer.check.sh managed"
-    changed "$dst"
-  fi
+  put "$tmp" firstmate/state/stuck-composer.check.sh 700
   rm -f "$tmp"
   if ! (cd "$FM" && bash -c '. bin/fm-pr-lib.sh && . bin/fm-check-lib.sh && fm_custom_check_registered state stuck-composer') >/dev/null 2>&1; then
     (cd "$FM" && bin/fm-check-register.sh stuck-composer) >/dev/null
@@ -272,15 +266,18 @@ stuck_composer() {
 }
 
 omp_plugins() {
-  local r n ids
+  local r n ids m
   ids=$(omp plugin list --json | jq -r '.marketplace[]?.id')
   for r in $PLUGINS; do
     n=${r#*/}
-    grep -qF "\"$r\"" "$HOME/.omp/marketplaces.json" 2>/dev/null || omp plugin marketplace add "$r" >/dev/null
-    grep -qx "$n@$n" <<<"$ids" && continue
-    omp plugin install "$n@$n" >/dev/null
-    m_add "$n plugin"
-    changed "omp plugin $n"
+    m=""
+    grep -qF "\"$r\"" "$HOME/.omp/marketplaces.json" 2>/dev/null || { omp plugin marketplace add "$r" >/dev/null; m=1; }
+    if ! grep -qx "$n@$n" <<<"$ids"; then
+      omp plugin install "$n@$n" >/dev/null
+      m_add "$n plugin"
+      changed "omp plugin $n"
+    fi
+    if [ -n "$m" ]; then m_add "$n marketplace"; changed "omp marketplace $r"; fi
   done
 }
 
@@ -357,7 +354,7 @@ setup() {
     kept "$HOME/.config/nvim"
   fi
   merge_models
-  while read -r src dst mode; do put "$src" "$dst" "$mode"; done < <(managed)
+  while read -r src dst mode; do put "$(from "$src")" "$dst" "$mode"; done < <(managed)
   stuck_composer
   guard gh
   guard gh-axi
@@ -369,19 +366,20 @@ setup() {
     changed "herdr omp integration"
   fi
 
-  if [ -n "$(m_list brew)" ] && [ -x /opt/homebrew/bin/brew ] && ! on_user_path /opt/homebrew/bin; then rc_line rc-brew "$BREW_LINE"; fi
-  rc_line rc-path "$PATH_LINE"
-  rc_line rc-mcp "$MCP_LINE"
+  if [ -n "$(m_list brew)" ] && [ -x /opt/homebrew/bin/brew ] && ! on_user_path /opt/homebrew/bin; then rc_line rc-brew "$BREW_LINE" .zprofile; fi
+  rc_line rc-path "$PATH_LINE" .zprofile .zshenv
+  if [ -f "$MCP" ]; then rc_line rc-mcp "$MCP_LINE" .zprofile .zshenv; fi
 
   mkdir -p "$LA" "$LOGS"
-  local herdr env
+  local herdr env mcp=""
   herdr=$(command -v herdr)
   env="<key>PATH</key><string>$SVC_PATH</string>"
+  if [ -f "$MCP" ]; then mcp="<key>CHROME_DEVTOOLS_AXI_MCP_PATH</key><string>$MCP</string>"; fi
   if loaded dev.bable.herdr || ! herdr_running; then
     put_plist dev.bable.herdr <<EOF
   <key>ProgramArguments</key><array><string>$herdr</string><string>server</string></array>
   <key>WorkingDirectory</key><string>$FM</string>
-  <key>EnvironmentVariables</key><dict>$env<key>CHROME_DEVTOOLS_AXI_MCP_PATH</key><string>$MCP</string></dict>
+  <key>EnvironmentVariables</key><dict>$env$mcp</dict>
   <key>SoftResourceLimits</key><dict><key>NumberOfFiles</key><integer>10240</integer></dict>
   <key>RunAtLoad</key><true/>
   <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
@@ -531,6 +529,7 @@ uninstall() {
             echo "  - $HOME/$extra: $line"
           fi ;;
         plugin) omp plugin uninstall "$name@$name" >/dev/null 2>&1 || true; echo "  - omp plugin $name" ;;
+        marketplace) omp plugin marketplace remove "$name" >/dev/null 2>&1 || true; echo "  - omp marketplace $name" ;;
         integration)
           herdr integration uninstall omp >/dev/null 2>&1 || true
           (cd "$HOME" && rmdir -p .omp/agent/extensions 2>/dev/null) || true
