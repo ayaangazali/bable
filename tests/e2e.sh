@@ -18,14 +18,14 @@ in_home() {
   shift 2
   env -i HOME="$home" PATH="$path" USER="$USER" LOGNAME="${LOGNAME:-$USER}" TMPDIR="${TMPDIR:-/tmp}" \
     BABLE_NO_SERVICES=1 GIT_CONFIG_COUNT=1 GIT_CONFIG_KEY_0="url.file://$ROOT.insteadOf" \
-    GIT_CONFIG_VALUE_0=https://github.com/ayaangazali/bable.git "$@"
+    GIT_CONFIG_VALUE_0=https://github.com/ayaangazali/bable.git ${GITHUB_TOKEN:+GITHUB_TOKEN=$GITHUB_TOKEN} "$@"
 }
 
 run_bable() { in_home "$T" "$PATH" "$@"; }
 
 snapshot() {
-  find "$T/.local" "$T/.omp" "$T/.acpx" "$T/.no-mistakes" "$T/.config/herdr" "$T/Library/LaunchAgents" "$T/.zprofile" \
-    -type f -exec shasum {} + -exec stat -f '%m %N' {} + | sort
+  find "$T/.local" "$T/.omp" "$T/.acpx" "$T/.zshenv" "$T/.config" "$T/firstmate/config" "$T/firstmate/state" "$T/.no-mistakes" "$T/.config/herdr" "$T/Library/LaunchAgents" "$T/.zprofile" \
+    -path "$T/.omp/logs" -prune -o -type f -exec shasum {} + -exec stat -f '%m %N' {} + | sort
 }
 
 CASE="fresh install"
@@ -36,13 +36,25 @@ cp "$T/.no-mistakes/config.yaml" "$STUB/sentinel"
 [ -L "$T/.local/bin/bable" ] || fail "no ~/.local/bin/bable"
 [ "$(git -C "$T/firstmate" branch --show-current)" = main ] || fail "firstmate not on main"
 [ "$(cat "$T/firstmate/config/backend")" = herdr ] || fail "firstmate backend not herdr"
-for f in .omp/agent/config.yml .omp/agent/lsp.json .acpx/config.json .config/herdr/config.toml; do
+for f in .omp/agent/config.yml .omp/agent/lsp.json .omp/agent/models.yml .acpx/config.json .config/herdr/config.toml \
+  .config/btop/btop.conf .config/nvim/init.lua .omp/agent/extensions/fm-no-pattern-kill.ts .omp/agent/extensions/herdr-omp-agent-state.ts \
+  firstmate/config/crew-dispatch.json firstmate/state/stuck-composer.check-trust .omp/agent/skills/vision/SKILL.md .agents/skills/kun/SKILL.md; do
   [ -f "$T/$f" ] || fail "missing seeded $f"
 done
 for l in herdr stall-nudge; do
   plutil -lint -s "$T/Library/LaunchAgents/dev.bable.$l.plist" || fail "dev.bable.$l.plist invalid"
 done
 grep -q 'bable: [0-9]* changed' "$STUB/out1" || fail "no change count"
+jq -e '.providers.inception' "$T/.omp/agent/models.yml" >/dev/null || fail "models.yml has no inception provider"
+[ "$(readlink "$T/.local/bin/gh")" = "$T/.local/share/bable/gh-guard/gh" ] || fail "gh is not behind the write-target guard"
+rc=0
+in_home "$T" "$T/.local/bin:$PATH" gh issue create --title e2e > /dev/null 2>&1 || rc=$?
+[ "$rc" = 2 ] || fail "gh guard let an untargeted issue write through (rc $rc)"
+[ "$(readlink "$T/.local/share/bable/gh-guard/gh-real")" = "$(command -v gh)" ] || fail "gh guard does not point at the real gh"
+for p in ponytail i-have-adhd caveman; do
+  in_home "$T" "$PATH" omp plugin list --json | jq -e --arg id "$p@$p" '.marketplace | map(.id) | index($id)' >/dev/null || fail "omp plugin $p missing"
+done
+grep -qxF "$(grep "^export PATH=" "$T/.zprofile")" "$T/.zshenv" || fail "PATH line missing from .zshenv"
 
 CASE="first-write"
 cmp -s "$STUB/sentinel" "$T/.no-mistakes/config.yaml" || fail "existing config overwritten"
@@ -75,10 +87,15 @@ run_bable "$T/.local/bin/bable" uninstall > "$STUB/out4" 2>&1 || { cat "$STUB/ou
 [ ! -e "$T/.local/bin/bable" ] || fail "bable link left behind"
 [ ! -e "$T/.local/bin/treehouse" ] || fail "release tool left behind"
 [ ! -e "$T/.omp/agent/config.yml" ] || fail "unmodified seed left behind"
+[ ! -e "$T/.omp/agent/models.yml" ] || fail "unmodified models.yml left behind"
+[ ! -e "$T/.omp/agent/extensions" ] || fail "omp extensions left behind"
+[ ! -e "$T/.local/bin/gh" ] || fail "gh guard link left behind"
+[ ! -e "$T/.config/nvim" ] || fail "unmodified nvim config left behind"
+[ ! -e "$T/.zshenv" ] || fail "empty .zshenv left behind"
+in_home "$T" "$PATH" omp plugin list --json | jq -e '.marketplace == []' >/dev/null || fail "omp plugins left installed"
 cmp -s "$STUB/sentinel" "$T/.no-mistakes/config.yaml" || fail "user config removed"
 [ -d "$T/firstmate/.git" ] || fail "firstmate removed"
 [ ! -e "$T/.zprofile" ] || fail "empty .zprofile left behind"
-[ ! -e "$T/.omp" ] || fail "empty seed folder left behind"
 [ ! -e "$T/Library/Logs/bable" ] || fail "log folder left behind"
 run_bable "$ROOT/bin/bable" uninstall > "$STUB/out5" 2>&1 || { cat "$STUB/out5"; fail "second uninstall exited non-zero"; }
 

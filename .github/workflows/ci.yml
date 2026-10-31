@@ -57,7 +57,18 @@ jobs:
       - name: Installed tools run and seeded configs load
         run: |
           export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
-          for t in git gh node jq uv herdr bun omp acpx no-mistakes treehouse; do "$t" --version; done
+          for t in git gh node jq rg nvim btop mosh uv herdr bun omp acpx tasks-axi gh-axi quota-axi lavish-axi chrome-devtools-axi chrome-devtools-mcp backpass forgejo-axi no-mistakes treehouse fallow gws pyrefly; do "$t" --version; done
+          command -v ondine
+          if [ "$(uname -m)" = arm64 ]; then sentrux --version; fi
+          [ "$(command -v gh)" = "$HOME/.local/bin/gh" ]
+          if gh issue create --title ci; then exit 1; fi
+          herdr integration status | grep '^omp: current'
+          omp plugin list --json | jq -e '[.marketplace[].id] | contains(["ponytail@ponytail", "i-have-adhd@i-have-adhd", "caveman@caveman"])'
+          jq -e '.providers.inception' ~/.omp/agent/models.yml
+          plutil -extract EnvironmentVariables.CHROME_DEVTOOLS_AXI_MCP_PATH raw ~/Library/LaunchAgents/dev.bable.herdr.plist | xargs test -f
+          zsh -c 'command -v herdr omp bable'
+          ponytail-review --help | grep USAGE >/dev/null && test -f ~/.omp/plugins/cache/marketplaces/ponytail/commands/ponytail-review.toml
+          mate-archive --help
           herdr config check
           omp config get enabledModels --json | jq -e '.value | length > 0'
           acpx config show | jq -e '.loaded.global and .agents.omp.command == "omp acp"'
@@ -116,7 +127,7 @@ jobs:
       - name: Status
         run: |
           env -u GH_TOKEN -u GITHUB_TOKEN ~/.local/bin/bable status | tee st
-          grep 'gh auth login --web' st
+          grep 'gh auth login --hostname github.com --git-protocol https --web' st
           grep 'todo  omp sign-in   run: omp, then /login' st
 
       - name: omp answers a prompt (needs an ANTHROPIC_API_KEY secret)
