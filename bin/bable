@@ -425,11 +425,15 @@ status() {
   local t p src dst mode pm ids r n
   echo "bable: status"
   for t in $TOOLS; do
-    if skip_tool "$t"; then
-      if [ "$t" = sentrux ]; then note "sentrux has no Intel build; the omp quality gate skips it"; elif ! have "$t"; then note "$t: Homebrew has no Intel bottle; brew install $(formula_of "$t") builds it from source"; fi
-      continue
+    if p=$(command -v "$t"); then
+      row ok "$t" "$p"
+    elif ! skip_tool "$t"; then
+      row miss "$t" "run: bable setup"
+    elif [ "$t" = sentrux ]; then
+      note "sentrux has no Intel build; the omp quality gate skips it"
+    else
+      note "$t: Homebrew has no Intel bottle; brew install $(formula_of "$t") builds it from source"
     fi
-    if p=$(command -v "$t"); then row ok "$t" "$p"; else row miss "$t" "run: bable setup"; fi
   done
   while read -r src dst; do
     if [ -e "$HOME/$dst" ]; then row ok config "$HOME/$dst"; else row miss config "$HOME/$dst  run: bable setup"; fi
