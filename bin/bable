@@ -1,0 +1,591 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+SRC=$(cd "$(dirname "$(readlink "$0" || echo "$0")")/.." && pwd)
+STATE=$HOME/.local/state/bable
+MANIFEST=$STATE/manifest
+LOGS=$HOME/Library/Logs/bable
+LA=$HOME/Library/LaunchAgents
+FM=$HOME/firstmate
+CREWSHIP_REF=5e94086dca77c9183f8a5b5c6394818e74f33050
+CS=$HOME/.local/share/bable/crewship/$CREWSHIP_REF
+BC=$CS/blueprint/config
+GUARD=$HOME/.local/share/bable/gh-guard
+ARCH=$(uname -m)
+BREW="git gh node jq nvim btop mosh"
+NPM="omp acpx tasks-axi gh-axi quota-axi lavish-axi chrome-devtools-axi chrome-devtools-mcp backpass ondine forgejo-axi"
+TOOLS="$BREW uv herdr bun $NPM rg no-mistakes treehouse fallow gws pyrefly sentrux"
+PLUGINS="DietrichGebert/ponytail ayghri/i-have-adhd JuliusBrussee/caveman"
+MCP=$HOME/.bun/install/global/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js
+SVC_PATH=$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin
+PATH_LINE="export PATH=\"\$HOME/.local/bin:\$HOME/.bun/bin:\$PATH\""
+BREW_LINE="eval \"\$(/opt/homebrew/bin/brew shellenv)\""
+MCP_LINE="export CHROME_DEVTOOLS_AXI_MCP_PATH=\"\$HOME/.bun/install/global/node_modules/chrome-devtools-mcp/build/src/bin/chrome-devtools-mcp.js\""
+USER_PATH=$PATH
+export PATH=$PATH:$HOME/.local/bin:$HOME/.bun/bin:/opt/homebrew/bin:/usr/local/bin
+N=0
+FAIL=0
+MANUAL=""
+
+changed() { N=$((N + 1)); echo "  + $*"; }
+kept() { echo "  = $* (left untouched)"; }
+have() { command -v "$1" >/dev/null; }
+services() { [ "${BABLE_NO_SERVICES:-0}" != 1 ]; }
+loaded() { launchctl print "gui/$(id -u)/$1" >/dev/null 2>&1; }
+herdr_running() { env -u HERDR_SOCKET_PATH herdr status server 2>/dev/null | grep -x 'status: running' >/dev/null; }
+row() { printf '  %-5s %-13s %s\n' "$1" "$2" "$3"; if [ "$1" = miss ]; then FAIL=1; fi; }
+note() { printf '  note  %s\n' "$*"; }
+m_add() { mkdir -p "$STATE"; echo "$*" >> "$MANIFEST"; }
+m_del() { if [ -f "$MANIFEST" ]; then grep -v "^$1 $2 " "$MANIFEST" > "$MANIFEST.tmp" || true; mv "$MANIFEST.tmp" "$MANIFEST"; fi; }
+m_list() { [ -f "$MANIFEST" ] && awk -v m="$1" '$2 == m { print $1 }' "$MANIFEST"; }
+m_has() { [ -f "$MANIFEST" ] && awk -v n="$1" -v m="$2" '$1 == n && $2 == m { f = 1 } END { exit !f }' "$MANIFEST"; }
+on_user_path() { case ":$USER_PATH:" in *":$1:"*) ;; *) return 1 ;; esac; }
+pkg_of() { if [ "$1" = omp ]; then echo @oh-my-pi/pi-coding-agent; else echo "$1"; fi; }
+formula_of() { case $1 in nvim) echo neovim ;; *) echo "$1" ;; esac; }
+from() { case $1 in config/*) echo "$SRC/$1" ;; *) echo "$CS/$1" ;; esac; }
+skip_tool() { [ "$ARCH" != arm64 ] && case $1 in sentrux | nvim | btop | mosh) ;; *) false ;; esac; }
+
+seeds() {
+  printf '%s\n' \
+    "blueprint/config/omp.yml .omp/agent/config.yml" \
+    "blueprint/config/omp-lsp.json .omp/agent/lsp.json" \
+    "blueprint/config/acpx.json .acpx/config.json" \
+    "blueprint/config/no-mistakes.yaml .no-mistakes/config.yaml" \
+    "blueprint/config/btop.conf .config/btop/btop.conf" \
+    "config/herdr.toml .config/herdr/config.toml"
+}
+
+managed() {
+  local e=.omp/agent/extensions f
+  printf '%s\n' \
+    "blueprint/config/herdr-sidebar.ts $e/crewship-herdr-sidebar.ts 644" \
+    "blueprint/config/omp-status-icons.ts $e/aa-mode-icons.ts 644" \
+    "blueprint/config/omp-no-pattern-kill.ts $e/fm-no-pattern-kill.ts 644" \
+    "blueprint/config/omp-opus-effort-cap.ts $e/fm-opus-effort-cap.ts 644" \
+    "blueprint/config/omp-quality-gate.ts $e/crewship-quality-gate.ts 644" \
+    "blueprint/config/omp-unii-memory.ts $e/fm-unii-memory.ts 644" \
+    "apps/imessage/memory.ts $e/fm-unii-memory/memory.ts 644" \
+    "blueprint/config/fm-gluttony.ts $e/fm-gluttony.ts 644" \
+    "blueprint/maintenance/ponytail-review .local/bin/ponytail-review 755" \
+    "blueprint/maintenance/mate-archive .local/bin/mate-archive 755"
+  for f in crew-harness secondmate-harness crew-dispatch.json brief-include.md startup-memory-budget herdr-presentation-spaces turnend-churn-absorb; do
+    echo "blueprint/config/$f firstmate/config/$f 644"
+  done
+}
+
+releases() {
+  printf '%s\n' \
+    "rg BurntSushi/ripgrep ripgrep-TAG-aarch64-apple-darwin.tar.gz ripgrep-TAG-x86_64-apple-darwin.tar.gz" \
+    "no-mistakes kunchenguid/no-mistakes no-mistakes-TAG-darwin-arm64.tar.gz no-mistakes-TAG-darwin-amd64.tar.gz" \
+    "treehouse kunchenguid/treehouse treehouse-TAG-darwin-arm64.tar.gz treehouse-TAG-darwin-amd64.tar.gz" \
+    "fallow fallow-rs/fallow fallow-darwin-arm64 fallow-darwin-x64" \
+    "gws googleworkspace/cli google-workspace-cli-aarch64-apple-darwin.tar.gz google-workspace-cli-x86_64-apple-darwin.tar.gz" \
+    "pyrefly facebook/pyrefly pyrefly-macos-arm64.tar.gz pyrefly-macos-x86_64.tar.gz" \
+    "sentrux sentrux/sentrux sentrux-darwin-arm64 -"
+}
+
+skills() {
+  printf '%s\n' \
+    "vision https://github.com/kunchenguid/vision.git skills/vision" \
+    "security-audit https://github.com/cloudflare/security-audit-skill.git skills/security-audit"
+}
+
+install_script() {
+  case $1 in
+    uv) curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh ;;
+    herdr) curl -fsSL https://herdr.dev/install.sh | sh ;;
+    bun) curl -fsSL https://bun.sh/install | SHELL=/bin/sh bash ;;
+  esac
+}
+
+latest_tag() {
+  local url
+  url=$(curl -fsSLI -o /dev/null -w '%{url_effective}' "https://github.com/$1/releases/latest") || return 1
+  case $url in */tag/*) echo "${url##*/tag/}" ;; *) return 1 ;; esac
+}
+
+fetch_asset() {
+  local repo=$1 tag=$2 asset=$3 out=$4 json want
+  json=$(curl -fsSL ${GITHUB_TOKEN:+-H "Authorization: Bearer $GITHUB_TOKEN"} "https://api.github.com/repos/$repo/releases/tags/$tag")
+  want=$(jq -r --arg a "$asset" '.assets[] | select(.name == $a) | .digest' <<<"$json")
+  case $want in sha256:*) ;; *) echo "bable: no sha256 digest for $repo $asset" >&2; exit 1 ;; esac
+  curl -fsSL -o "$out" "https://github.com/$repo/releases/download/$tag/$asset"
+  if [ "$(shasum -a 256 "$out" | cut -d' ' -f1)" != "${want#sha256:}" ]; then
+    echo "bable: checksum mismatch for $asset" >&2
+    exit 1
+  fi
+}
+
+install_release() {
+  local name=$1 repo arm x86 asset tag tmp bin
+  read -r _ repo arm x86 < <(releases | grep "^$name ")
+  asset=$x86
+  if [ "$ARCH" = arm64 ]; then asset=$arm; fi
+  tag=$(latest_tag "$repo")
+  asset=${asset//TAG/$tag}
+  tmp=$(mktemp -d)
+  fetch_asset "$repo" "$tag" "$asset" "$tmp/$asset"
+  case $asset in
+    *.tar.gz) tar -xzf "$tmp/$asset" -C "$tmp"; bin=$(find "$tmp" -type f -name "$name" | head -1) ;;
+    *) bin=$tmp/$asset ;;
+  esac
+  if [ "$name" = sentrux ]; then
+    fetch_asset "$repo" "$tag" grammars-darwin-arm64.tar.gz "$tmp/grammars.tar.gz"
+    mkdir -p "$HOME/.sentrux/plugins"
+    tar -xzf "$tmp/grammars.tar.gz" -C "$HOME/.sentrux/plugins"
+  fi
+  mkdir -p "$HOME/.local/bin"
+  install -m 0755 "$bin" "$HOME/.local/bin/$name"
+  rm -rf "$tmp"
+  m_del "$name" release
+  m_add "$name release $tag"
+  changed "$name $tag"
+}
+
+fetch_crewship() {
+  [ -d "$CS" ] && return 0
+  local tmp p=Crewship-$CREWSHIP_REF
+  tmp=$(mktemp -d)
+  curl -fsSL "https://codeload.github.com/i098/Crewship/tar.gz/$CREWSHIP_REF" \
+    | tar -xz -C "$tmp" "$p/blueprint/config" "$p/blueprint/maintenance" "$p/blueprint/ansible/templates/stuck-composer.check.sh.j2" "$p/apps/imessage/memory.ts"
+  sed -i '' "s/[$]{line,,}/\$(tr A-Z a-z <<<\"\$line\")/g" "$tmp/$p/blueprint/maintenance/ponytail-review"
+  rm -rf "$(dirname "$CS")"
+  mkdir -p "$(dirname "$CS")"
+  mv "$tmp/$p" "$CS"
+  rmdir "$tmp"
+}
+
+put_plist() {
+  local label=$1 dst=$LA/$1.plist tmp fresh=0
+  tmp=$(mktemp)
+  {
+    printf '%s\n' '<?xml version="1.0" encoding="UTF-8"?>' \
+      '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">' \
+      '<plist version="1.0">' '<dict>'
+    printf '  <key>Label</key><string>%s</string>\n' "$label"
+    cat
+    printf '%s\n' '</dict>' '</plist>'
+  } > "$tmp"
+  if cmp -s "$tmp" "$dst"; then
+    rm -f "$tmp"
+  else
+    plutil -lint -s "$tmp"
+    mv "$tmp" "$dst"
+    chmod 644 "$dst"
+    changed "$dst"
+    fresh=1
+  fi
+  if ! services; then return 0; fi
+  if ! launchctl print "gui/$(id -u)" >/dev/null 2>&1; then
+    echo "  ! $label not loaded: log in at the console once (or turn on automatic login), then run: bable setup"
+  elif ! loaded "$label"; then
+    launchctl bootstrap "gui/$(id -u)" "$dst"
+    changed "loaded $label"
+  elif [ "$fresh" = 1 ]; then
+    echo "  ! reload to apply: launchctl bootout gui/$(id -u)/$label && launchctl bootstrap gui/$(id -u) $dst"
+  fi
+}
+
+rc_line() {
+  local key=$1 line=$2 f
+  shift 2
+  for f in "$@"; do
+    if ! grep -qxF "$line" "$HOME/$f" 2>/dev/null; then
+      echo "$line" >> "$HOME/$f"
+      m_add "$key rc $f"
+      changed "$HOME/$f: $line"
+    fi
+  done
+}
+
+line_of() { case $1 in rc-brew) echo "$BREW_LINE" ;; rc-mcp) echo "$MCP_LINE" ;; *) echo "$PATH_LINE" ;; esac; }
+
+put() {
+  local src=$1 dst=$HOME/$2
+  cmp -s "$src" "$dst" && return 0
+  if [ -e "$dst" ] && ! m_has "$2" managed; then kept "$dst"; return 0; fi
+  mkdir -p "$(dirname "$dst")"
+  install -m "$3" "$src" "$dst"
+  m_has "$2" managed || m_add "$2 managed"
+  changed "$dst"
+}
+
+merge_models() {
+  local out
+  out=$(S="$BC/omp-models.yml" D="$HOME/.omp/agent/models.yml" bun -e '
+const fs = require("fs");
+const { YAML } = Bun;
+const want = YAML.parse(fs.readFileSync(process.env.S, "utf8"));
+let text = null;
+try { text = fs.readFileSync(process.env.D, "utf8"); } catch {}
+const obj = (v) => v && typeof v === "object" && !Array.isArray(v);
+const merge = (a, b) => { for (const k in b) a[k] = obj(a[k]) && obj(b[k]) ? merge(a[k], b[k]) : b[k]; return a; };
+let out = want;
+if (text !== null) {
+  const providers = { ...want.providers };
+  delete providers.inception;
+  out = merge(YAML.parse(text) || {}, { providers });
+}
+const s = JSON.stringify(out, null, 2) + "\n";
+if (s !== text) {
+  fs.mkdirSync(require("path").dirname(process.env.D), { recursive: true, mode: 0o700 });
+  fs.writeFileSync(process.env.D, s, { mode: 0o600 });
+  console.log(text === null ? "new" : "merged");
+}')
+  case $out in
+    new) m_add ".omp/agent/models.yml models $(shasum -a 256 "$HOME/.omp/agent/models.yml" | cut -d' ' -f1)"; changed "$HOME/.omp/agent/models.yml" ;;
+    merged) changed "$HOME/.omp/agent/models.yml (Crewship model overrides merged)" ;;
+  esac
+}
+
+guard() {
+  local name=$1 link=$HOME/.local/bin/$1 real c=""
+  if [ -L "$link" ] && [ "$(readlink "$link")" = "$GUARD/$name" ]; then
+    real=$(readlink "$GUARD/$name-real")
+  elif [ -e "$link" ]; then
+    kept "$link"
+    return 0
+  else
+    real=$(command -v "$name") || return 0
+  fi
+  mkdir -p "$GUARD" "$HOME/.local/bin"
+  if ! cmp -s "$CS/blueprint/maintenance/gh" "$GUARD/$name"; then install -m 0755 "$CS/blueprint/maintenance/gh" "$GUARD/$name"; c=1; fi
+  if [ "$(readlink "$GUARD/$name-real" || true)" != "$real" ]; then ln -sfn "$real" "$GUARD/$name-real"; c=1; fi
+  if [ ! -L "$link" ]; then ln -s "$GUARD/$name" "$link"; m_add "$name guard"; c=1; fi
+  if [ -n "$c" ]; then changed "$name write-target guard ($link, real $real)"; fi
+}
+
+stuck_composer() {
+  local tmp
+  tmp=$(mktemp)
+  sed -e "s#{{ crewship_firstmate_dir | quote }}#'$FM'#" -e 's/{{ crewship_stuck_composer_msg_age }}/120/g' \
+    -e 's/{{ crewship_stuck_composer_hold }}/120/g' -e 's/{{ crewship_stuck_composer_poll }}/30/g' -e 's/sha1sum/shasum/' \
+    "$CS/blueprint/ansible/templates/stuck-composer.check.sh.j2" > "$tmp"
+  put "$tmp" firstmate/state/stuck-composer.check.sh 700
+  rm -f "$tmp"
+  if ! (cd "$FM" && bash -c '. bin/fm-pr-lib.sh && . bin/fm-check-lib.sh && fm_custom_check_registered state stuck-composer') >/dev/null 2>&1; then
+    (cd "$FM" && bin/fm-check-register.sh stuck-composer) >/dev/null
+    changed "stuck-composer check registered with Firstmate"
+  fi
+}
+
+omp_plugins() {
+  local r n ids m
+  ids=$(omp plugin list --json | jq -r '.marketplace[]?.id')
+  for r in $PLUGINS; do
+    n=${r#*/}
+    m=""
+    grep -qF "\"$r\"" "$HOME/.omp/marketplaces.json" 2>/dev/null || { omp plugin marketplace add "$r" >/dev/null; m=1; }
+    if ! grep -qx "$n@$n" <<<"$ids"; then
+      omp plugin install "$n@$n" >/dev/null
+      m_add "$n plugin"
+      changed "omp plugin $n"
+    fi
+    if [ -n "$m" ]; then m_add "$n marketplace"; changed "omp marketplace $r"; fi
+  done
+}
+
+upstream_skills() {
+  local name url sub d tmp=""
+  while read -r name url sub; do
+    for d in .omp/agent/skills .claude/skills; do
+      [ ! -e "$HOME/$d/$name" ] || continue
+      if [ -z "$tmp" ]; then tmp=$(mktemp -d); fi
+      [ -d "$tmp/$name" ] || git clone --quiet --depth 1 "$url" "$tmp/$name"
+      mkdir -p "$HOME/$d"
+      cp -R "$tmp/$name/$sub" "$HOME/$d/$name"
+      m_add "$d/$name skill"
+      changed "$HOME/$d/$name"
+    done
+  done < <(skills)
+  if [ -n "$tmp" ]; then rm -rf "$tmp"; fi
+  if [ ! -e "$HOME/.agents/skills/kun" ]; then
+    DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 npx --yes skills add kunchenguid/kun -g -a codex -a claude-code -y >/dev/null
+    m_add "kun skill"
+    changed "$HOME/.agents/skills/kun"
+  fi
+}
+
+setup() {
+  echo "bable: setting up from $SRC"
+  local t missing="" src dst mode
+  for t in $BREW; do have "$t" || skip_tool "$t" || missing="$missing $t"; done
+  if [ -n "$missing" ]; then
+    have brew || { echo "bable: Homebrew is missing; run ./install.sh first" >&2; exit 1; }
+    for t in $missing; do formula_of "$t"; done | xargs brew install
+    for t in $missing; do m_add "$t brew"; changed "$t (Homebrew)"; done
+  fi
+  for t in uv herdr bun; do
+    if ! have "$t"; then install_script "$t"; m_add "$t script"; changed "$t"; fi
+  done
+  missing=""
+  for t in $NPM; do have "$t" || missing="$missing $t"; done
+  if [ -n "$missing" ]; then
+    for t in $missing; do pkg_of "$t"; done | xargs bun add -g
+    for t in $missing; do m_add "$t bun"; changed "$t"; done
+  fi
+  while read -r t _; do
+    have "$t" || skip_tool "$t" || install_release "$t"
+  done < <(releases)
+  fetch_crewship
+
+  if [ -e "$FM" ]; then
+    kept "$FM"
+  else
+    git clone --quiet --branch main https://github.com/kunchenguid/firstmate.git "$FM"
+    mkdir -p "$FM/config"
+    echo herdr > "$FM/config/backend"
+    m_add "firstmate clone"
+    changed "Firstmate cloned to $FM (backend herdr)"
+  fi
+
+  while read -r src dst; do
+    if [ -e "$HOME/$dst" ]; then
+      kept "$HOME/$dst"
+    else
+      mkdir -p "$(dirname "$HOME/$dst")"
+      cp "$(from "$src")" "$HOME/$dst"
+      m_add "$dst cfg $src"
+      changed "$HOME/$dst"
+    fi
+  done < <(seeds)
+  if [ ! -e "$HOME/.config/nvim" ] || [ -z "$(ls -A "$HOME/.config/nvim")" ]; then
+    mkdir -p "$HOME/.config/nvim"
+    cp -R "$BC/nvim/." "$HOME/.config/nvim"
+    m_add ".config/nvim cfgdir blueprint/config/nvim"
+    changed "$HOME/.config/nvim (LazyVim)"
+  else
+    kept "$HOME/.config/nvim"
+  fi
+  merge_models
+  while read -r src dst mode; do put "$(from "$src")" "$dst" "$mode"; done < <(managed)
+  stuck_composer
+  guard gh
+  guard gh-axi
+  omp_plugins
+  upstream_skills
+  if ! herdr integration status 2>/dev/null | grep '^omp: current' >/dev/null; then
+    herdr integration install omp >/dev/null
+    m_has herdr-omp integration || m_add "herdr-omp integration"
+    changed "herdr omp integration"
+  fi
+
+  if [ -n "$(m_list brew)" ] && [ -x /opt/homebrew/bin/brew ] && ! on_user_path /opt/homebrew/bin; then rc_line rc-brew "$BREW_LINE" .zprofile; fi
+  rc_line rc-path "$PATH_LINE" .zprofile .zshenv
+  if [ -f "$MCP" ]; then rc_line rc-mcp "$MCP_LINE" .zprofile .zshenv; fi
+
+  mkdir -p "$LA" "$LOGS"
+  local herdr env mcp=""
+  herdr=$(command -v herdr)
+  env="<key>PATH</key><string>$SVC_PATH</string>"
+  if [ -f "$MCP" ]; then mcp="<key>CHROME_DEVTOOLS_AXI_MCP_PATH</key><string>$MCP</string>"; fi
+  if loaded dev.bable.herdr || ! herdr_running; then
+    put_plist dev.bable.herdr <<EOF
+  <key>ProgramArguments</key><array><string>$herdr</string><string>server</string></array>
+  <key>WorkingDirectory</key><string>$FM</string>
+  <key>EnvironmentVariables</key><dict>$env$mcp</dict>
+  <key>SoftResourceLimits</key><dict><key>NumberOfFiles</key><integer>10240</integer></dict>
+  <key>RunAtLoad</key><true/>
+  <key>KeepAlive</key><dict><key>SuccessfulExit</key><false/></dict>
+  <key>ProcessType</key><string>Interactive</string>
+  <key>StandardOutPath</key><string>$LOGS/herdr.log</string>
+  <key>StandardErrorPath</key><string>$LOGS/herdr.log</string>
+EOF
+  else
+    kept "herdr server already running outside bable"
+  fi
+  put_plist dev.bable.stall-nudge <<EOF
+  <key>ProgramArguments</key><array><string>$SRC/libexec/fm-main-stall-nudge</string></array>
+  <key>EnvironmentVariables</key><dict>$env<key>FM_HOME</key><string>$FM</string><key>HERDR_BIN_PATH</key><string>$herdr</string><key>HERDR_SESSION</key><string>default</string></dict>
+  <key>StartInterval</key><integer>15</integer>
+  <key>RunAtLoad</key><false/>
+  <key>StandardOutPath</key><string>$LOGS/stall-nudge.log</string>
+  <key>StandardErrorPath</key><string>$LOGS/stall-nudge.log</string>
+EOF
+
+  echo "bable: $N changed"
+  status
+}
+
+svc() {
+  local label=$1 name=$2 detail=loaded
+  if loaded "$label"; then
+    if [ "$name" = herdr ] && launchctl print "gui/$(id -u)/$label" | grep 'state = running' >/dev/null; then detail="loaded, running"; fi
+    row ok "$name" "$detail"
+  elif ! services && [ -f "$LA/$label.plist" ]; then
+    row ok "$name" "plist written (services off)"
+  elif [ "$name" = herdr ] && herdr_running; then
+    row ok "$name" "herdr server running outside bable"
+  else
+    row miss "$name" "run: bable setup"
+  fi
+}
+
+status() {
+  local t p src dst mode pm ids r n
+  echo "bable: status"
+  for t in $TOOLS; do
+    if p=$(command -v "$t"); then
+      row ok "$t" "$p"
+    elif ! skip_tool "$t"; then
+      row miss "$t" "run: bable setup"
+    elif [ "$t" = sentrux ]; then
+      note "sentrux has no Intel build; the omp quality gate skips it"
+    else
+      note "$t: Homebrew has no Intel bottle; brew install $(formula_of "$t") builds it from source"
+    fi
+  done
+  while read -r src dst; do
+    if [ -e "$HOME/$dst" ]; then row ok config "$HOME/$dst"; else row miss config "$HOME/$dst  run: bable setup"; fi
+  done < <(seeds)
+  while read -r src dst mode; do
+    [ -e "$HOME/$dst" ] || row miss managed "$HOME/$dst  run: bable setup"
+  done < <(managed)
+  ids=$(omp plugin list --json 2>/dev/null | jq -r '.marketplace[]?.id' 2>/dev/null || true)
+  for r in $PLUGINS; do
+    n=${r#*/}
+    if grep -qx "$n@$n" <<<"$ids"; then row ok plugin "$n"; else row miss plugin "$n  run: bable setup"; fi
+  done
+  if herdr integration status 2>/dev/null | grep '^omp: current' >/dev/null; then row ok integration "herdr omp: current"; else row miss integration "herdr omp  run: bable setup"; fi
+  if [ -d "$FM/.git" ]; then
+    row ok firstmate "$FM ($(git -C "$FM" branch --show-current))"
+  else
+    row miss firstmate "run: bable setup"
+  fi
+  svc dev.bable.herdr herdr
+  svc dev.bable.stall-nudge stall-nudge
+  if gh auth status >/dev/null 2>&1; then row ok "gh sign-in" "signed in"; else row todo "gh sign-in" "run: gh auth login --hostname github.com --git-protocol https --web"; fi
+  if sqlite3 -readonly "$HOME/.omp/agent/agent.db" 'select 1 from auth_credentials where disabled_cause is null limit 1' 2>/dev/null | grep -qx 1; then row ok "omp sign-in" "signed in"; else row todo "omp sign-in" "run: omp, then /login"; fi
+  if have herdr && ! herdr config check >/dev/null 2>&1; then note "herdr does not accept ~/.config/herdr/config.toml; run: herdr update, then herdr config check"; fi
+  if nc -z -G 1 127.0.0.1 22 >/dev/null 2>&1; then
+    row ok "remote login" "ssh on port 22"
+  else
+    note "Remote Login off: System Settings > General > Sharing > Remote Login"
+  fi
+  if pmset -g batt 2>/dev/null | grep -q InternalBattery; then
+    note "a sleeping MacBook pauses agents: keep caffeinate -ims running (lid closed without a display still sleeps)"
+  else
+    pm=$(pmset -g 2>/dev/null || true)
+    [ "$(awk '$1 == "sleep" { print $2; exit }' <<<"$pm")" = 0 ] || note "run: sudo pmset -a sleep 0"
+    [ "$(awk '$1 == "autorestart" { print $2; exit }' <<<"$pm")" = 1 ] || note "run: sudo pmset -a autorestart 1"
+    [ "$(fdesetup isactive 2>/dev/null || true)" != true ] || note "FileVault on: after a power cut agents wait for a GUI login"
+  fi
+  if ! on_user_path "$HOME/.local/bin" || ! on_user_path "$HOME/.bun/bin"; then note "open a new terminal (or: source ~/.zprofile) to put bable, omp and herdr on PATH"; fi
+  return "$FAIL"
+}
+
+update() {
+  local t list tag old new repo
+  if [ "$SRC" = "$HOME/.local/share/bable/src" ]; then git -C "$SRC" pull --ff-only; fi
+  old=$(herdr --version 2>/dev/null || true)
+  list=$(m_list brew | grep -vx brew || true)
+  if [ -n "$list" ]; then for t in $list; do formula_of "$t"; done | xargs brew upgrade; fi
+  for t in $(m_list script); do install_script "$t"; done
+  list=$(m_list bun || true)
+  if [ -n "$list" ]; then for t in $list; do echo "$(pkg_of "$t")@latest"; done | xargs bun add -g; fi
+  for t in $(m_list release); do
+    repo=$(releases | awk -v n="$t" '$1 == n { print $2 }')
+    tag=$(latest_tag "$repo")
+    grep -qx "$t release $tag" "$MANIFEST" || install_release "$t"
+  done
+  if [ -n "$(m_list plugin)" ]; then omp plugin marketplace update >/dev/null; omp plugin upgrade >/dev/null; fi
+  if m_has firstmate clone; then
+    if [ -z "$(git -C "$FM" status --porcelain)" ]; then git -C "$FM" pull --ff-only; else kept "firstmate has local changes"; fi
+  fi
+  new=$(herdr --version 2>/dev/null || true)
+  if [ "$old" != "$new" ] && loaded dev.bable.herdr; then
+    echo "  ! herdr upgraded; restart to apply: launchctl kickstart -k gui/$(id -u)/dev.bable.herdr"
+  fi
+  PATH=$USER_PATH exec "$SRC/bin/bable" setup
+}
+
+uninstall() {
+  local f label name method extra line
+  for f in "$LA"/dev.bable.*.plist; do
+    [ -e "$f" ] || continue
+    label=$(basename "$f" .plist)
+    if services && loaded "$label"; then
+      if [ "$label" = dev.bable.herdr ]; then echo "bable: stopping dev.bable.herdr ends its herdr sessions"; fi
+      launchctl bootout "gui/$(id -u)/$label" || true
+      for _ in $(seq 30); do loaded "$label" || break; sleep 1; done
+    fi
+    rm -f "$f"
+    echo "  - $f"
+  done
+  if [ -f "$MANIFEST" ]; then
+    while read -r name method extra; do
+      case $method in
+        release)
+          rm -f "$HOME/.local/bin/$name"; echo "  - $HOME/.local/bin/$name"
+          if [ "$name" = sentrux ]; then rm -rf "$HOME/.sentrux"; fi ;;
+        managed | guard)
+          if [ "$method" = guard ]; then name=.local/bin/$name; fi
+          rm -f "$HOME/$name"; echo "  - $HOME/$name"
+          (cd "$HOME" && rmdir -p "$(dirname "$name")" 2>/dev/null) || true
+          if [ "$name" = .local/bin/mate-archive ]; then MANUAL="$MANUAL
+    rm -rf $HOME/.local/share/crewship/mate-archive"; fi ;;
+        cfg | cfgdir | models)
+          if { [ "$method" = cfg ] && cmp -s "$(from "$extra")" "$HOME/$name"; } \
+            || { [ "$method" = cfgdir ] && diff -rq "$(from "$extra")" "$HOME/$name" >/dev/null 2>&1; } \
+            || { [ "$method" = models ] && [ "$(shasum -a 256 "$HOME/$name" 2>/dev/null | cut -d' ' -f1)" = "$extra" ]; }; then
+            rm -rf "${HOME:?}/$name"; echo "  - $HOME/$name"
+            (cd "$HOME" && rmdir -p "$(dirname "$name")" 2>/dev/null) || true
+          elif [ -e "$HOME/$name" ]; then
+            kept "$HOME/$name edited"
+          fi ;;
+        rc)
+          line=$(line_of "$name")
+          if [ -f "$HOME/$extra" ]; then
+            grep -vxF "$line" "$HOME/$extra" > "$STATE/rc" || true
+            cat "$STATE/rc" > "$HOME/$extra"
+            [ -s "$HOME/$extra" ] || rm -f "$HOME/$extra"
+            echo "  - $HOME/$extra: $line"
+          fi ;;
+        plugin) omp plugin uninstall "$name@$name" >/dev/null 2>&1 || true; echo "  - omp plugin $name" ;;
+        marketplace) omp plugin marketplace remove "$name" >/dev/null 2>&1 || true; echo "  - omp marketplace $name" ;;
+        integration)
+          herdr integration uninstall omp >/dev/null 2>&1 || true
+          (cd "$HOME" && rmdir -p .omp/agent/extensions 2>/dev/null) || true
+          echo "  - herdr omp integration" ;;
+        skill)
+          if [ "$name" = kun ]; then MANUAL="$MANUAL
+    npx skills remove kun -g"; else MANUAL="$MANUAL
+    rm -rf $HOME/$name"; fi ;;
+        brew)
+          if [ "$name" = brew ]; then MANUAL="$MANUAL
+    Homebrew: https://github.com/Homebrew/install#uninstall-homebrew"; else MANUAL="$MANUAL
+    brew uninstall $(formula_of "$name")"; fi ;;
+        bun) m_has bun script || MANUAL="$MANUAL
+    bun remove -g $(pkg_of "$name")" ;;
+        script)
+          case $name in
+            bun) MANUAL="$MANUAL
+    rm -rf $HOME/.bun" ;;
+            uv) MANUAL="$MANUAL
+    rm $HOME/.local/bin/uv $HOME/.local/bin/uvx" ;;
+            *) MANUAL="$MANUAL
+    rm $HOME/.local/bin/$name" ;;
+          esac ;;
+        clone) MANUAL="$MANUAL
+    rm -rf $FM" ;;
+      esac
+    done < "$MANIFEST"
+  fi
+  if [ -n "$MANUAL" ]; then echo "bable: kept these; remove them yourself if you want:$MANUAL"; fi
+  rm -f "$HOME/.local/bin/bable"
+  rm -rf "$STATE" "$LOGS"
+  echo "bable: uninstalled"
+  if [ -d "$HOME/.local/share/bable" ]; then rm -rf "$HOME/.local/share/bable"; fi
+}
+
+usage() { echo "usage: bable setup | status | update | uninstall"; }
+
+[ $# -le 1 ] || { usage >&2; exit 2; }
+case "${1:-}" in
+  setup) setup ;;
+  status) status ;;
+  update) update ;;
+  uninstall) uninstall ;;
+  -h|--help|help) usage ;;
+  *) usage >&2; exit 2 ;;
+esac

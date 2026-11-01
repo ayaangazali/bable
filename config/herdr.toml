@@ -1,0 +1,47 @@
+onboarding = false
+
+[theme]
+name = "rose-pine"
+auto_switch = false
+
+[theme.custom]
+sidebar_bg = "reset"
+
+[ui]
+sidebar_width = 46
+sidebar_max_width = 56
+show_agent_labels_on_pane_borders = true
+agent_panel_sort = "spaces"
+status_indicators = "symbols"
+
+[ui.toast]
+delivery = "terminal"
+
+[ui.sidebar.agents]
+rows = [
+  [
+    "state_icon",
+    { token = "$who", fg = "#cba6f7", bold = true, rules = [{ equals = "firstmate", fg = "#89b4fa", bold = true }, { starts_with = "☾", bold = false }] },
+    { token = "terminal_title", fg = "#94e2d5", rules = [{ starts_with = "└" }, { starts_with = "", hide = true }] },
+  ],
+  [
+    { token = "terminal_title", fg = "#cdd6f4", dim = true, rules = [{ starts_with = "└", hide = true }] },
+  ],
+  [
+    { token = "$pr", fg = "#89b4fa" },
+    { token = "$issue", fg = "#cba6f7" },
+    { token = "$add", fg = "#a6e3a1" },
+    { token = "$del", fg = "#f38ba8" },
+    { token = "$files", fg = "#f9e2af" },
+  ],
+]
+
+[update]
+channel = "stable"
+
+[server]
+headless_cols = 120
+headless_rows = 40
+
+[session]
+resume_agents_on_restore = false
