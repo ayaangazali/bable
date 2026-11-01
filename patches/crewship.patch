@@ -1,0 +1,77 @@
+diff -ru a/blueprint/maintenance/gh b/blueprint/maintenance/gh
+--- a/blueprint/maintenance/gh	2026-11-01 01:19:42
++++ b/blueprint/maintenance/gh	2026-11-01 01:20:08
+@@ -1,6 +1,8 @@
+ #!/usr/bin/env python3
++import json
+ import os
+ import re
++import shlex
+ import sys
+ from pathlib import Path
+ 
+@@ -274,11 +276,49 @@
+         )
+ 
+ 
++def gh_aliases():
++    base = os.environ.get("GH_CONFIG_DIR") or os.path.join(
++        os.environ.get("XDG_CONFIG_HOME") or os.path.expanduser("~/.config"), "gh")
++    try:
++        lines = open(os.path.join(base, "config.yml")).read().splitlines()
++    except OSError:
++        return {}
++    aliases, inside = {}, False
++    for line in lines:
++        if not line.strip() or line.lstrip().startswith("#"):
++            continue
++        if not line[0].isspace():
++            inside = line.rstrip() == "aliases:"
++            continue
++        name, sep, value = line.strip().partition(":")
++        if inside and sep:
++            value = value.strip()
++            if len(value) > 1 and value[0] == value[-1] == "'":
++                value = value[1:-1].replace("''", "'")
++            elif len(value) > 1 and value[0] == value[-1] == '"':
++                value = json.loads(value)
++            aliases[name.strip().strip("'\"")] = value
++    return aliases
++
++
++def expand_alias(argv):
++    expansion = gh_aliases().get(argv[0]) if argv else None
++    if expansion is None or expansion.startswith("!"):
++        return argv
++    words, rest = shlex.split(expansion), list(argv[1:])
++    used = set()
++    for n, value in enumerate(rest, 1):
++        if any(f"${n}" in word for word in words):
++            words = [word.replace(f"${n}", value) for word in words]
++            used.add(n)
++    return words + [value for n, value in enumerate(rest, 1) if n not in used]
++
++
+ def main():
+     cli = Path(sys.argv[0]).name
+     if cli not in {"gh", "gh-axi"}:
+         raise ValueError("Blocked: the GitHub wrapper must run as gh or gh-axi.")
+-    check_write(sys.argv[1:], cli)
++    check_write(expand_alias(sys.argv[1:]) if cli == "gh" else sys.argv[1:], cli)
+     wrapper = Path(__file__).resolve()
+     real = wrapper.with_name(cli + "-real").resolve(strict=True)
+     if real == wrapper:
+diff -ru a/blueprint/maintenance/ponytail-review b/blueprint/maintenance/ponytail-review
+--- a/blueprint/maintenance/ponytail-review	2026-11-01 01:19:42
++++ b/blueprint/maintenance/ponytail-review	2026-11-01 01:19:42
+@@ -110,8 +110,8 @@
+ 
+ verdicts=0
+ while IFS= read -r line; do
+-  if [[ "${line,,}" =~ ^([^:]+:)?l[0-9]+(-l?[0-9]+)?: ||
+-        "${line,,}" =~ ^net:[[:space:]]*-[0-9]+[[:space:]]+lines ]]; then
++  if [[ "$(tr A-Z a-z <<<"$line")" =~ ^([^:]+:)?l[0-9]+(-l?[0-9]+)?: ||
++        "$(tr A-Z a-z <<<"$line")" =~ ^net:[[:space:]]*-[0-9]+[[:space:]]+lines ]]; then
+     verdicts=0
+     break
+   fi

@@ -18,7 +18,9 @@ main() {
   for t in git gh node jq $extra; do command -v "$t" >/dev/null || need=1; done
   if [ -n "$need" ] && ! command -v brew >/dev/null && [ -z "$(find_brew)" ]; then
     echo "bable: installing Homebrew (it asks for your password; needs an admin account)"
-    /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/tty \
+    local hb
+    hb=$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh) || die "cannot download the Homebrew installer; check the network and run this again"
+    /bin/bash -c "$hb" </dev/tty && [ -n "$(find_brew)" ] \
       || die "Homebrew did not install (see its message above); install it from https://brew.sh and run this again"
     mkdir -p "$HOME/.local/state/bable"
     echo "brew brew" >> "$HOME/.local/state/bable/manifest"
