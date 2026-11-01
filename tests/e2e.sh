@@ -52,7 +52,7 @@ in_home "$T" "$T/.local/bin:$PATH" gh issue create --title e2e > /dev/null 2>&1 
 [ "$rc" = 2 ] || fail "gh guard let an untargeted issue write through (rc $rc)"
 [ "$(readlink "$T/.local/share/bable/gh-guard/gh-real")" = "$(command -v gh)" ] || fail "gh guard does not point at the real gh"
 for p in ponytail i-have-adhd caveman; do
-  in_home "$T" "$PATH" omp plugin list --json | jq -e --arg id "$p@$p" '.marketplace | map(.id) | index($id)' >/dev/null || fail "omp plugin $p missing"
+  in_home "$T" "$T/.bun/bin:$PATH" omp plugin list --json | jq -e --arg id "$p@$p" '.marketplace | map(.id) | index($id)' >/dev/null || fail "omp plugin $p missing"
 done
 grep -qxF "$(grep "^export PATH=" "$T/.zprofile")" "$T/.zshenv" || fail "PATH line missing from .zshenv"
 
@@ -92,7 +92,7 @@ run_bable "$T/.local/bin/bable" uninstall > "$STUB/out4" 2>&1 || { cat "$STUB/ou
 [ ! -e "$T/.local/bin/gh" ] || fail "gh guard link left behind"
 [ ! -e "$T/.config/nvim" ] || fail "unmodified nvim config left behind"
 [ ! -e "$T/.zshenv" ] || fail "empty .zshenv left behind"
-in_home "$T" "$PATH" omp plugin list --json | jq -e '.marketplace == []' >/dev/null || fail "omp plugins left installed"
+in_home "$T" "$T/.bun/bin:$PATH" omp plugin list --json | jq -e '.marketplace == []' >/dev/null || fail "omp plugins left installed"
 cmp -s "$STUB/sentinel" "$T/.no-mistakes/config.yaml" || fail "user config removed"
 [ -d "$T/firstmate/.git" ] || fail "firstmate removed"
 [ ! -e "$T/.zprofile" ] || fail "empty .zprofile left behind"
