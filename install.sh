@@ -13,8 +13,9 @@ main() {
   case "$(uname -m)" in arm64|x86_64) ;; *) die "unsupported CPU $(uname -m)" ;; esac
   [ "$(id -u)" != 0 ] || die "run as your normal user, not root"
 
-  local t need=""
-  for t in git gh node jq rg nvim btop mosh; do command -v "$t" >/dev/null || need=1; done
+  local t need="" extra=""
+  if [ "$(uname -m)" = arm64 ]; then extra="nvim btop mosh"; fi
+  for t in git gh node jq $extra; do command -v "$t" >/dev/null || need=1; done
   if [ -n "$need" ] && ! command -v brew >/dev/null && [ -z "$(find_brew)" ]; then
     echo "bable: installing Homebrew (it asks for your password; needs an admin account)"
     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)" </dev/tty \

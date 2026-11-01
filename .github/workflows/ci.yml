@@ -59,9 +59,9 @@ jobs:
       - name: Installed tools run and seeded configs load
         run: |
           export PATH=$HOME/.local/bin:$HOME/.bun/bin:$PATH
-          for t in git gh node jq rg nvim btop mosh uv herdr bun omp acpx tasks-axi gh-axi quota-axi lavish-axi chrome-devtools-axi chrome-devtools-mcp backpass forgejo-axi no-mistakes treehouse fallow gws pyrefly; do "$t" --version; done
+          for t in git gh node jq rg uv herdr bun omp acpx tasks-axi gh-axi quota-axi lavish-axi chrome-devtools-axi chrome-devtools-mcp backpass forgejo-axi no-mistakes treehouse fallow gws pyrefly; do "$t" --version; done
           command -v ondine
-          if [ "$(uname -m)" = arm64 ]; then sentrux --version; fi
+          if [ "$(uname -m)" = arm64 ]; then for t in sentrux nvim btop mosh; do "$t" --version; done; fi
           [ "$(command -v gh)" = "$HOME/.local/bin/gh" ]
           if gh issue create --title ci; then exit 1; fi
           herdr integration status | grep '^omp: current'

@@ -8,7 +8,7 @@ Derived from [i098/Crewship](https://github.com/i098/Crewship) under FSL-1.1-ALv
 
 ## Install
 
-You need macOS 14 or newer (Apple silicon or Intel), a normal (non-root) account, and the Xcode Command Line Tools (`xcode-select --install`). If git, gh, node, jq, ripgrep, Neovim, btop or mosh is missing and Homebrew is not installed, the installer sets up Homebrew first; Homebrew asks for your password and needs an admin account.
+You need macOS 14 or newer (Apple silicon or Intel), a normal (non-root) account, and the Xcode Command Line Tools (`xcode-select --install`). If git, gh, node or jq is missing (or, on Apple silicon, Neovim, btop or mosh) and Homebrew is not installed, the installer sets up Homebrew first; Homebrew asks for your password and needs an admin account.
 
 From a checkout:
 
@@ -81,10 +81,10 @@ Logs are in `~/Library/Logs/bable`.
 
 bable installs Crewship's default host, the `agents` and `firstmate` profiles. Tools are installed only when they are missing from your `PATH`:
 
-- git, gh, node, jq, ripgrep, Neovim, btop and mosh from Homebrew.
+- git, gh, node and jq from Homebrew, and on Apple silicon also Neovim, btop and mosh. Homebrew no longer ships Intel bottles, so on Intel bable skips those three (building them from source takes too long) and `bable status` prints the `brew install` command.
 - uv, Herdr and bun from their official installers (`~/.local/bin`, `~/.bun`). Homebrew has no Intel bottles for them.
 - With `bun add -g`: omp, acpx, the AXI agent CLIs (tasks-axi, gh-axi, quota-axi, lavish-axi, chrome-devtools-axi, forgejo-axi), chrome-devtools-mcp, backpass and ondine.
-- From GitHub releases, each checked against the SHA-256 digest GitHub publishes for the asset: no-mistakes, treehouse, fallow, gws (Google Workspace CLI), pyrefly and sentrux with its grammars (sentrux has no Intel build).
+- From GitHub releases, each checked against the SHA-256 digest GitHub publishes for the asset: ripgrep, no-mistakes, treehouse, fallow, gws (Google Workspace CLI), pyrefly and sentrux with its grammars (sentrux has no Intel build).
 - Firstmate cloned to `~/firstmate` on `main`, with Herdr as its backend.
 
 From [Crewship](https://github.com/i098/Crewship) at a pinned commit, which bable downloads into `~/.local/share/bable/crewship`:
