@@ -108,7 +108,7 @@ bable records each item in `~/.local/state/bable/manifest`, so update and uninst
 ## What bable never touches
 
 - A tool already on your `PATH`. bable uses it and never installs a second copy. Only `bable update` upgrades, and only what bable installed.
-- A config, extension or Firstmate setting file that already exists.
+- A config, extension, `~/.local/bin` script or Firstmate setting file that already exists.
 - A Herdr server that bable did not start. bable reports it and writes no Herdr launch agent.
 - Launch agents outside `dev.bable.*`.
 - System settings (`pmset`, sharing, login items) and anything needing `sudo`.
