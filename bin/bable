@@ -263,13 +263,13 @@ if (cur === undefined) {
   const providers = { ...YAML.parse(fs.readFileSync(S, "utf8")).providers };
   delete providers.inception;
   const out = merge(structuredClone(cur), { providers });
-  if (JSON.stringify(out) !== JSON.stringify(cur) || !fs.existsSync(D)) {
+  if (JSON.stringify(out) !== JSON.stringify(cur)) {
     fs.writeFileSync(D, YAML.stringify(out, null, 2), { mode: 0o600 });
     console.log("merged");
   }
 }')
   case $out in
-    new) m_add "$f models $(sha "$HOME/$f")"; changed "$HOME/$f" ;;
+    new) m_del $f models; m_add "$f models $(sha "$HOME/$f")"; changed "$HOME/$f" ;;
     merged)
       if [ -n "$old" ] && [ "$old" = "$was" ]; then m_del $f models; m_add "$f models $(sha "$HOME/$f")"; fi
       changed "$HOME/$f (Crewship model overrides merged)" ;;
@@ -361,6 +361,7 @@ upstream_skills() {
       [ -d "$tmp/$name" ] || git clone --quiet --depth 1 "$url" "$tmp/$name"
       mkdir -p "$HOME/$d"
       cp -R "$tmp/$name/$sub" "$HOME/$d/$name"
+      m_del "$d/$name" skill
       m_add "$d/$name skill $(git -C "$tmp/$name" rev-parse HEAD)"
       changed "$HOME/$d/$name"
     done
@@ -368,6 +369,7 @@ upstream_skills() {
   if [ -n "$tmp" ]; then rm -rf "$tmp"; fi
   if ! present "$HOME/.agents/skills/kun"; then
     DISABLE_TELEMETRY=1 DO_NOT_TRACK=1 npx --yes skills add kunchenguid/kun -g -a codex -a claude-code -y >/dev/null
+    m_del kun skill
     m_add "kun skill $(git ls-remote "$KUN" HEAD | cut -f1)"
     changed "$HOME/.agents/skills/kun"
   fi
@@ -422,6 +424,7 @@ setup() {
     else
       (umask 077 && mkdir -p "$(dirname "$HOME/$dst")")
       install -m 600 "$(from "$src")" "$HOME/$dst"
+      m_del "$dst" cfg
       m_add "$dst cfg $(sha "$HOME/$dst")"
       changed "$HOME/$dst"
     fi
@@ -431,6 +434,7 @@ setup() {
   else
     mkdir -p "$HOME/.config/nvim"
     cp -R "$BC/nvim/." "$HOME/.config/nvim"
+    m_del .config/nvim cfgdir
     m_add ".config/nvim cfgdir $(dirsha "$HOME/.config/nvim")"
     changed "$HOME/.config/nvim (LazyVim)"
   fi
@@ -558,9 +562,7 @@ status() {
   if gh auth status >/dev/null 2>&1; then row ok "gh sign-in" "signed in"; else row todo "gh sign-in" "run: gh auth login --hostname github.com --git-protocol https --web"; fi
   if sqlite3 -readonly "$HOME/.omp/agent/agent.db" 'select 1 from auth_credentials where disabled_cause is null limit 1' 2>/dev/null | grep -x 1 >/dev/null; then row ok "omp sign-in" "signed in"; else row todo "omp sign-in" "run: omp, then /login"; fi
   if have herdr && [ -f "$HOME/.config/herdr/config.toml" ]; then
-    if ! herdr config --help 2>/dev/null | grep '^  check ' >/dev/null; then
-      note "this herdr cannot check ~/.config/herdr/config.toml; update herdr"
-    elif ! herdr config check >/dev/null 2>&1; then
+    if herdr config --help 2>&1 | grep 'herdr config check' >/dev/null && ! herdr config check >/dev/null 2>&1; then
       note "herdr does not accept ~/.config/herdr/config.toml; run: herdr config check"
     fi
   fi
