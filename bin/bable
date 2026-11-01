@@ -562,7 +562,7 @@ status() {
   if gh auth status >/dev/null 2>&1; then row ok "gh sign-in" "signed in"; else row todo "gh sign-in" "run: gh auth login --hostname github.com --git-protocol https --web"; fi
   if sqlite3 -readonly "$HOME/.omp/agent/agent.db" 'select 1 from auth_credentials where disabled_cause is null limit 1' 2>/dev/null | grep -x 1 >/dev/null; then row ok "omp sign-in" "signed in"; else row todo "omp sign-in" "run: omp, then /login"; fi
   if have herdr && [ -f "$HOME/.config/herdr/config.toml" ]; then
-    if herdr config --help 2>&1 | grep 'herdr config check' >/dev/null && ! herdr config check >/dev/null 2>&1; then
+    if herdr config --help 2>&1 | grep '^ *check ' >/dev/null && ! herdr config check >/dev/null 2>&1; then
       note "herdr does not accept ~/.config/herdr/config.toml; run: herdr config check"
     fi
   fi
