@@ -147,6 +147,7 @@ fetch_crewship() {
   tmp=$(mktemp -d)
   curl -fsSL "https://codeload.github.com/i098/Crewship/tar.gz/$CREWSHIP_REF" \
     | tar -xz -C "$tmp" "$p/blueprint/config" "$p/blueprint/maintenance" "$p/blueprint/ansible/templates/stuck-composer.check.sh.j2" "$p/apps/imessage/memory.ts"
+  sed -i '' "s/[$]{line,,}/\$(tr A-Z a-z <<<\"\$line\")/g" "$tmp/$p/blueprint/maintenance/ponytail-review"
   rm -rf "$(dirname "$CS")"
   mkdir -p "$(dirname "$CS")"
   mv "$tmp/$p" "$CS"
@@ -512,7 +513,9 @@ uninstall() {
         managed | guard)
           if [ "$method" = guard ]; then name=.local/bin/$name; fi
           rm -f "$HOME/$name"; echo "  - $HOME/$name"
-          (cd "$HOME" && rmdir -p "$(dirname "$name")" 2>/dev/null) || true ;;
+          (cd "$HOME" && rmdir -p "$(dirname "$name")" 2>/dev/null) || true
+          if [ "$name" = .local/bin/mate-archive ]; then MANUAL="$MANUAL
+    rm -rf $HOME/.local/share/crewship/mate-archive"; fi ;;
         cfg | cfgdir | models)
           if { [ "$method" = cfg ] && cmp -s "$(from "$extra")" "$HOME/$name"; } \
             || { [ "$method" = cfgdir ] && diff -rq "$(from "$extra")" "$HOME/$name" >/dev/null 2>&1; } \

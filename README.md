@@ -73,7 +73,7 @@ A sleeping laptop pauses every agent. Keep `caffeinate -ims` running in a termin
 | `bable setup` | Installs what is missing and prints `bable status`. |
 | `bable status` | Read-only checklist. Exits 1 while anything is `miss`. |
 | `bable update` | The only command that upgrades: what bable installed, Firstmate (when it has no local changes) and bable itself (for one-line installs). It prints the `launchctl` command when Herdr needs a restart or reload and never restarts it for you, because a restart ends Herdr's sessions. |
-| `bable uninstall` | Removes the launch agents, release binaries, the gh guard, the omp extensions, plugins (and the marketplaces bable added) and Herdr integration, unedited configs (and their folders when empty), its logs and the shell lines bable added. It prints the commands for the rest (Homebrew formulas, the uv, Herdr and bun installs, bun packages, skills, `~/firstmate`) and does not run them. |
+| `bable uninstall` | Removes the launch agents, release binaries, the gh guard, the omp extensions, plugins (and the marketplaces bable added) and Herdr integration, unedited configs (and their folders when empty), its logs and the shell lines bable added. It prints the commands for the rest (Homebrew formulas, the uv, Herdr and bun installs, bun packages, skills, `~/firstmate`, the `mate-archive` index) and does not run them. |
 
 Logs are in `~/Library/Logs/bable`.
 

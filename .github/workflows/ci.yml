@@ -71,6 +71,8 @@ jobs:
           zsh -c 'command -v herdr omp bable'
           test -f ~/.omp/plugins/cache/marketplaces/ponytail/commands/ponytail-review.toml
           ponytail-review --help | grep USAGE >/dev/null
+          mkdir "$RUNNER_TEMP/omp-stub" && printf '#!/bin/sh\ncat >/dev/null\necho "Lean already. Ship."\n' > "$RUNNER_TEMP/omp-stub/omp" && chmod +x "$RUNNER_TEMP/omp-stub/omp"
+          echo x | PATH=$RUNNER_TEMP/omp-stub:$PATH /bin/bash ~/.local/bin/ponytail-review --stdin
           mate-archive index && mate-archive search pong
           herdr config check
           omp config get enabledModels --json | jq -e '.value | length > 0'
