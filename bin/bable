@@ -65,7 +65,9 @@ managed() {
     "blueprint/config/omp-quality-gate.ts $e/crewship-quality-gate.ts 644" \
     "blueprint/config/omp-unii-memory.ts $e/fm-unii-memory.ts 644" \
     "apps/imessage/memory.ts $e/fm-unii-memory/memory.ts 644" \
-    "blueprint/config/fm-gluttony.ts $e/fm-gluttony.ts 644"
+    "blueprint/config/fm-gluttony.ts $e/fm-gluttony.ts 644" \
+    "blueprint/maintenance/ponytail-review .local/bin/ponytail-review 755" \
+    "blueprint/maintenance/mate-archive .local/bin/mate-archive 755"
   for f in crew-harness secondmate-harness crew-dispatch.json brief-include.md startup-memory-budget herdr-presentation-spaces turnend-churn-absorb; do
     echo "blueprint/config/$f firstmate/config/$f 644"
   done

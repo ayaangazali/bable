@@ -70,6 +70,8 @@ jobs:
           plutil -extract EnvironmentVariables.CHROME_DEVTOOLS_AXI_MCP_PATH raw ~/Library/LaunchAgents/dev.bable.herdr.plist | xargs test -f
           zsh -c 'command -v herdr omp bable'
           test -f ~/.omp/plugins/cache/marketplaces/ponytail/commands/ponytail-review.toml
+          ponytail-review --help | grep USAGE >/dev/null
+          mate-archive index && mate-archive search pong
           herdr config check
           omp config get enabledModels --json | jq -e '.value | length > 0'
           acpx config show | jq -e '.loaded.global and .agents.omp.command == "omp acp"'

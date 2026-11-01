@@ -93,6 +93,7 @@ From [Crewship](https://github.com/i098/Crewship) at a pinned commit, which babl
 - `~/.omp/agent/models.yml`: Crewship's model overrides, merged into your file on every setup. Your own providers stay.
 - omp extensions, rewritten on every setup unless the file was there before bable, in `~/.omp/agent/extensions`: the Herdr sidebar feed, mode icons, the `pkill`/`killall` block, the Opus effort cap, the turn-end quality gate (sentrux and fallow), unii memory and gluttony.
 - The omp plugins ponytail, i-have-adhd and caveman, and Herdr's omp integration, so Herdr shows each omp pane's real state.
+- `ponytail-review` (runs the ponytail plugin's review on a diff from any harness, and fails closed) and `mate-archive` (searches omp chat that compaction removed) in `~/.local/bin`.
 - A guard in front of `gh` and `gh-axi` that blocks issue and API writes without an explicit repository. bable does not add it if a `~/.local/bin/gh` of your own exists.
 - Firstmate's dispatch settings in `~/firstmate/config` (crew harness, the second mate harness, `crew-dispatch.json` model routing, the crew brief, the startup memory budget, the flat Herdr layout and the churn flag), plus the stuck-composer check, registered with Firstmate.
 - The vision and security-audit skills for omp and Claude Code, and the kun skill.
