@@ -31,6 +31,7 @@ snapshot() {
 CASE="fresh install"
 mkdir -p "$T/.no-mistakes"
 echo 'sentinel: 1' > "$T/.no-mistakes/config.yaml"
+printf 'alias e2e=true' > "$T/.zshrc"
 cp "$T/.no-mistakes/config.yaml" "$STUB/sentinel"
 (cd "$ROOT" && run_bable ./install.sh) > "$STUB/out1" 2>&1 || { cat "$STUB/out1"; fail "install.sh exited non-zero"; }
 [ -L "$T/.local/bin/bable" ] || fail "no ~/.local/bin/bable"
@@ -45,7 +46,7 @@ for l in herdr stall-nudge; do
   plutil -lint -s "$T/Library/LaunchAgents/dev.bable.$l.plist" || fail "dev.bable.$l.plist invalid"
 done
 grep -q 'bable: [0-9]* changed' "$STUB/out1" || fail "no change count"
-jq -e '.providers.inception' "$T/.omp/agent/models.yml" >/dev/null || fail "models.yml has no inception provider"
+in_home "$T" "$T/.bun/bin:$PATH" bun -e 'Bun.YAML.parse(require("fs").readFileSync(process.argv[1], "utf8")).providers.inception || process.exit(1)' "$T/.omp/agent/models.yml" || fail "models.yml has no inception provider"
 [ "$(readlink "$T/.local/bin/gh")" = "$T/.local/share/bable/gh-guard/gh" ] || fail "gh is not behind the write-target guard"
 rc=0
 in_home "$T" "$T/.local/bin:$PATH" gh issue create --title e2e > /dev/null 2>&1 || rc=$?
@@ -55,6 +56,7 @@ for p in ponytail i-have-adhd caveman; do
   in_home "$T" "$T/.bun/bin:$PATH" omp plugin list --json | jq -e --arg id "$p@$p" '.marketplace | map(.id) | index($id)' >/dev/null || fail "omp plugin $p missing"
 done
 grep -qxF "$(grep "^export PATH=" "$T/.zprofile")" "$T/.zshenv" || fail "PATH line missing from .zshenv"
+grep -qx 'alias e2e=true' "$T/.zshrc" || fail "PATH line was glued onto the last line of .zshrc"
 
 CASE="first-write"
 cmp -s "$STUB/sentinel" "$T/.no-mistakes/config.yaml" || fail "existing config overwritten"
@@ -65,6 +67,18 @@ before=$(snapshot)
 run_bable "$T/.local/bin/bable" setup > "$STUB/out2" 2>&1 || { cat "$STUB/out2"; fail "second setup exited non-zero"; }
 grep -q 'bable: 0 changed' "$STUB/out2" || { cat "$STUB/out2"; fail "second setup changed something"; }
 [ "$(snapshot)" = "$before" ] || fail "second setup rewrote files"
+
+CASE="edited managed file"
+echo '{}' > "$T/firstmate/config/crew-dispatch.json"
+run_bable "$T/.local/bin/bable" setup > "$STUB/oute" 2>&1 || { cat "$STUB/oute"; fail "setup after an edit exited non-zero"; }
+[ "$(cat "$T/firstmate/config/crew-dispatch.json")" = '{}' ] || fail "setup overwrote an edited managed file"
+
+CASE="gh alias"
+mkdir -p "$T/.config/gh"
+printf 'aliases:\n    e2e-ic: issue create\n' >> "$T/.config/gh/config.yml"
+rc=0
+in_home "$T" "$T/.local/bin:$PATH" gh e2e-ic --title e2e > /dev/null 2>&1 || rc=$?
+[ "$rc" = 2 ] || fail "gh guard let an aliased untargeted issue write through (rc $rc)"
 
 CASE="update"
 run_bable "$T/.local/bin/bable" update > "$STUB/outu" 2>&1 || { cat "$STUB/outu"; fail "update exited non-zero"; }
@@ -92,6 +106,8 @@ run_bable "$T/.local/bin/bable" uninstall > "$STUB/out4" 2>&1 || { cat "$STUB/ou
 [ ! -e "$T/.local/bin/gh" ] || fail "gh guard link left behind"
 [ ! -e "$T/.config/nvim" ] || fail "unmodified nvim config left behind"
 [ ! -e "$T/.zshenv" ] || fail "empty .zshenv left behind"
+[ "$(cat "$T/.zshrc")" = 'alias e2e=true' ] || fail "uninstall did not restore .zshrc"
+[ "$(cat "$T/firstmate/config/crew-dispatch.json")" = '{}' ] || fail "uninstall removed an edited managed file"
 in_home "$T" "$T/.bun/bin:$PATH" omp plugin list --json | jq -e '.marketplace == []' >/dev/null || fail "omp plugins left installed"
 cmp -s "$STUB/sentinel" "$T/.no-mistakes/config.yaml" || fail "user config removed"
 [ -d "$T/firstmate/.git" ] || fail "firstmate removed"

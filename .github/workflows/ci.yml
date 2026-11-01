@@ -66,7 +66,7 @@ jobs:
           if gh issue create --title ci; then exit 1; fi
           herdr integration status | grep '^omp: current'
           omp plugin list --json | jq -e '[.marketplace[].id] | contains(["ponytail@ponytail", "i-have-adhd@i-have-adhd", "caveman@caveman"])'
-          jq -e '.providers.inception' ~/.omp/agent/models.yml
+          bun -e 'Bun.YAML.parse(require("fs").readFileSync(process.argv[1], "utf8")).providers.inception || process.exit(1)' ~/.omp/agent/models.yml
           plutil -extract EnvironmentVariables.CHROME_DEVTOOLS_AXI_MCP_PATH raw ~/Library/LaunchAgents/dev.bable.herdr.plist | xargs test -f
           zsh -c 'command -v herdr omp bable'
           test -f ~/.omp/plugins/cache/marketplaces/ponytail/commands/ponytail-review.toml
