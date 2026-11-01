@@ -107,6 +107,7 @@ CASE="piped install, herdr already on PATH"
 cat > "$STUB/herdr" <<'EOF'
 #!/bin/sh
 [ "$1 $2" = "status server" ] && echo "status: not running"
+[ "$1 $2" = "integration status" ] && echo "omp: current"
 exit 0
 EOF
 chmod +x "$STUB/herdr"
